@@ -14,8 +14,6 @@
 **A flagship-grade batch photo watermarking application tailored for Android and Samsung Galaxy (One UI).**  
 *Full Ultra HDR Gainmap preservation · Lossless Motion Photo (HEIC/JPG) export · Camera EXIF frames · Floating PNG watermarks · Snapseed-style gesture controls*
 
-[Screenshots](#screenshots) • [Features](#features) • [Architecture & Native Engine](#architecture--native-engine) • [Design System](#design-system) • [Getting Started](#getting-started) • [Disclaimer & Trademarks](#disclaimer--trademarks) • [License](#license)
-
 </div>
 
 ---
