@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'motion_photo_service.dart';
@@ -57,6 +59,37 @@ class DevicePhotoModel {
 class DevicePhotoService {
   static const MethodChannel _channel = MethodChannel('com.example.watermark_samsung/ultra_hdr');
   static final Map<String, Uint8List> _thumbnailMemoryCache = {};
+  static const int _maxThumbnailCacheEntries = 600;
+
+  static void _storeThumbnail(String key, Uint8List bytes) {
+    if (_thumbnailMemoryCache.length >= _maxThumbnailCacheEntries) {
+      _thumbnailMemoryCache.remove(_thumbnailMemoryCache.keys.first);
+    }
+    _thumbnailMemoryCache[key] = bytes;
+  }
+
+  /// 用引擎原生解码器把整图字节降采样为 ≤[size] 宽的 JPEG 缩略图
+  static Future<Uint8List?> _downscaleToThumbnail(Uint8List bytes, int size) async {
+    try {
+      final codec = await ui.instantiateImageCodec(bytes, targetWidth: size);
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+      final rgba = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final w = image.width;
+      final h = image.height;
+      image.dispose();
+      if (rgba == null) return null;
+      final decoded = img.Image.fromBytes(
+        width: w,
+        height: h,
+        bytes: rgba.buffer,
+        order: img.ChannelOrder.rgba,
+      );
+      return Uint8List.fromList(img.encodeJpg(decoded, quality: 85));
+    } catch (_) {
+      return null;
+    }
+  }
 
   // ─── 缩略图加载队列：防止同时启动大量原生调用导致主线程拥塞 ───
   static const int _maxConcurrentThumbnailLoads = 6;
@@ -275,20 +308,23 @@ class DevicePhotoService {
             'height': size,
           });
           if (thumbBytes != null && thumbBytes.isNotEmpty) {
-            _thumbnailMemoryCache[cacheKey] = thumbBytes;
+            _storeThumbnail(cacheKey, thumbBytes);
             result = thumbBytes;
           }
         } catch (_) {}
       }
 
-      // 2. 本地文件读取回退
+      // 2. 本地文件读取回退 (降采样为真正的缩略图，避免把整张原图永久驻留内存)
       if (result == null && photo.path.isNotEmpty) {
         try {
           final file = File(photo.path);
           if (await file.exists()) {
             final bytes = await file.readAsBytes();
-            _thumbnailMemoryCache[cacheKey] = bytes;
-            result = bytes;
+            final thumb = await _downscaleToThumbnail(bytes, size);
+            if (thumb != null) {
+              _storeThumbnail(cacheKey, thumb);
+              result = thumb;
+            }
           }
         } catch (_) {}
       }

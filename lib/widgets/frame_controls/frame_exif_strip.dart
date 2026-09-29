@@ -16,7 +16,7 @@ class FrameExifStrip extends StatelessWidget {
     required this.onChanged,
   });
 
-  void _showEditExifDialog(BuildContext context) {
+  Future<void> _showEditExifDialog(BuildContext context) async {
     final modelController = TextEditingController(text: config.exifInfo.model);
     final makeController = TextEditingController(text: config.exifInfo.make);
     final focalController = TextEditingController(text: config.exifInfo.focalLength);
@@ -25,7 +25,8 @@ class FrameExifStrip extends StatelessWidget {
     final isoController = TextEditingController(text: config.exifInfo.iso);
     final dateController = TextEditingController(text: config.exifInfo.dateTime);
 
-    BlurredDialogHelper.showBlurredDialog(
+    try {
+      await BlurredDialogHelper.showBlurredDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
@@ -155,7 +156,17 @@ class FrameExifStrip extends StatelessWidget {
           },
         );
       },
-    );
+      );
+    } finally {
+      // 对话框关闭后释放全部控制器，避免 ChangeNotifier 泄漏累积
+      modelController.dispose();
+      makeController.dispose();
+      focalController.dispose();
+      fNumberController.dispose();
+      expController.dispose();
+      isoController.dispose();
+      dateController.dispose();
+    }
   }
 
   Widget _buildTextField(

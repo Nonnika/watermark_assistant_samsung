@@ -44,16 +44,17 @@ class FrameLogoStrip extends StatelessWidget {
     }
   }
 
-  void _showAddCustomLogoDialog(
+  Future<void> _showAddCustomLogoDialog(
     BuildContext context,
     Uint8List bytes,
     ui.Image? decoded,
     String defaultName,
-  ) {
+  ) async {
     final nameController = TextEditingController(text: defaultName);
     bool dialogInverted = config.isLogoInverted;
 
-    BlurredDialogHelper.showBlurredDialog(
+    try {
+      await BlurredDialogHelper.showBlurredDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
@@ -180,7 +181,10 @@ class FrameLogoStrip extends StatelessWidget {
           },
         );
       },
-    );
+      );
+    } finally {
+      nameController.dispose();
+    }
   }
 
   void _confirmDeleteCustomLogo(BuildContext context, String id, String name) {

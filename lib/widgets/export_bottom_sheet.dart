@@ -79,6 +79,7 @@ class _ExportBottomSheetState extends State<ExportBottomSheet> {
 
     try {
       for (int i = 0; i < total; i++) {
+        if (!mounted) return; // 导出中弹窗被关闭时立即终止，避免 setState after dispose
         final item = targetList[i];
         final isMotionTranscode = item.isMotionPhoto && _preserveMotion && _watermarkMotionVideo;
         setState(() {
@@ -131,21 +132,28 @@ class _ExportBottomSheetState extends State<ExportBottomSheet> {
           baseImg.dispose();
         }
 
+        if (!mounted) {
+          baseImg.dispose();
+          return;
+        }
         setState(() {
           _progress = (i + 1) / total;
         });
       }
 
+      if (!mounted) return;
       setState(() {
         _isProcessing = false;
         _isFinished = true;
         _statusText = '全部导出完成！共 ${_exportedPaths.length} 张图片已保存至相册。';
       });
     } catch (e) {
-      setState(() {
-        _isProcessing = false;
-        _statusText = '导出出错: $e';
-      });
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _statusText = '导出出错: $e';
+        });
+      }
     } finally {
       // 出错或提前退出时释放尚未消费的预解码结果，避免纹理泄漏
       try {
@@ -160,7 +168,10 @@ class _ExportBottomSheetState extends State<ExportBottomSheet> {
     final hasHdr = widget.images.any((img) => img.isUltraHdr);
     final hasMotion = widget.images.any((img) => img.isMotionPhoto);
 
-    return Container(
+    // 导出进行中禁止关闭弹窗，防止后台继续落盘且 UI 无反馈
+    return PopScope(
+      canPop: !_isProcessing,
+      child: Container(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
       decoration: BoxDecoration(
         color: _bgDark,
@@ -527,6 +538,7 @@ class _ExportBottomSheetState extends State<ExportBottomSheet> {
           ],
         ),
       ),
+    ),
     );
   }
 

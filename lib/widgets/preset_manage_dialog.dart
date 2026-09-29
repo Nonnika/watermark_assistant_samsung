@@ -7,12 +7,14 @@ import '../services/preset_storage_service.dart';
 import '../theme/one_ui_theme.dart';
 import '../utils/blurred_dialog_helper.dart';
 
+// 文件级共享配色常量 (黑黄高质感暗色主题)
+const Color _bgDark = Color(0xFF141418);
+const Color _cardDark = Color(0xFF202026);
+const Color _cardBorder = Color(0xFF2C2C34);
+const Color _textPrimary = Color(0xFFF5F5F7);
+const Color _textSecondary = Color(0xFF9E9EA8);
+
 class PresetManageDialog {
-  static const Color _bgDark = Color(0xFF141418);
-  static const Color _cardDark = Color(0xFF202026);
-  static const Color _cardBorder = Color(0xFF2C2C34);
-  static const Color _textPrimary = Color(0xFFF5F5F7);
-  static const Color _textSecondary = Color(0xFF9E9EA8);
 
   /// 弹出保存当前配置为预设的对话框 (带全屏高斯背景模糊，暗色主题)
   static Future<void> showSavePresetDialog({
@@ -26,8 +28,7 @@ class PresetManageDialog {
       text: '自定义预设 ${DateTime.now().month}月${DateTime.now().day}日',
     );
 
-    await BlurredDialogHelper.showBlurredDialog(
-      context: context,
+    await BlurredDialogHelper.showBlurredDialog(      context: context,
       builder: (context) {
         return AlertDialog(
           backgroundColor: _bgDark,
@@ -133,6 +134,8 @@ class PresetManageDialog {
         );
       },
     );
+
+    controller.dispose();
   }
 
   /// 打开已保存预设列表底部抽屉 (暗色主题)
@@ -143,12 +146,46 @@ class PresetManageDialog {
     BlurredDialogHelper.showBlurredBottomSheet(
       context: context,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return FutureBuilder<List<SavedPreset>>(
-              future: PresetStorageService.loadPresets(),
-              builder: (context, snapshot) {
-                final presets = snapshot.data ?? [];
+        return _PresetListSheet(onApplyPreset: onApplyPreset);
+      },
+    );
+  }
+}
+
+/// 预设列表抽屉：在 State 中持有列表数据，删除后原地更新，避免 FutureBuilder 重建时闪空
+class _PresetListSheet extends StatefulWidget {
+  final Function(SavedPreset preset) onApplyPreset;
+
+  const _PresetListSheet({required this.onApplyPreset});
+
+  @override
+  State<_PresetListSheet> createState() => _PresetListSheetState();
+}
+
+class _PresetListSheetState extends State<_PresetListSheet> {
+  List<SavedPreset>? _presets;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPresets();
+  }
+
+  Future<void> _loadPresets() async {
+    final presets = await PresetStorageService.loadPresets();
+    if (!mounted) return;
+    setState(() => _presets = presets);
+  }
+
+  Future<void> _deletePreset(SavedPreset preset) async {
+    await PresetStorageService.deletePreset(preset.id);
+    if (!mounted) return;
+    setState(() => _presets?.removeWhere((p) => p.id == preset.id));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final presets = _presets;
 
                 return Container(
                   decoration: BoxDecoration(
@@ -195,7 +232,18 @@ class PresetManageDialog {
                             ),
                           ),
                           const SizedBox(height: 16),
-                          if (presets.isEmpty)
+                          if (presets == null)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 40),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 26,
+                                  height: 26,
+                                  child: CircularProgressIndicator(color: OneUITheme.primaryBlue, strokeWidth: 2.4),
+                                ),
+                              ),
+                            )
+                          else if (presets.isEmpty)
                             const Padding(
                               padding: EdgeInsets.symmetric(vertical: 40),
                               child: Column(
@@ -276,15 +324,12 @@ class PresetManageDialog {
                                         children: [
                                           IconButton(
                                             icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
-                                            onPressed: () async {
-                                              await PresetStorageService.deletePreset(preset.id);
-                                              setSheetState(() {});
-                                            },
+                                            onPressed: () => _deletePreset(preset),
                                           ),
                                           FilledButton.tonal(
                                             onPressed: () {
                                               Navigator.pop(context);
-                                              onApplyPreset(preset);
+                                              widget.onApplyPreset(preset);
                                             },
                                             style: FilledButton.styleFrom(
                                               backgroundColor: Colors.white12,
@@ -307,11 +352,5 @@ class PresetManageDialog {
                     ),
                   ),
                 );
-              },
-            );
-          },
-        );
-      },
-    );
   }
 }

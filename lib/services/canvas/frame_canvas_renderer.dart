@@ -39,10 +39,12 @@ class FrameCanvasRenderer {
       canvas.drawRect(Rect.fromLTWH(0, 0, totalWidth, totalHeight), bgPaint);
     }
 
+    // 逆向推导需与正向公式严格互逆：pad = W·r, bottomBar = H·b, totalH = H·(1+b) + W·r。
+    // photoH 必须精确等于原图高 H，否则 drawImageRect 会把照片非等比压扁
     final double pad = totalWidth * (config.paddingRatio / (1 + config.paddingRatio * 2));
-    final double bottomBarH = totalHeight * (config.bottomBarRatio / (1 + config.paddingRatio + config.bottomBarRatio));
     final double photoW = totalWidth - pad * 2;
-    final double photoH = totalHeight - pad - bottomBarH;
+    final double photoH = (totalHeight - pad) / (1 + config.bottomBarRatio);
+    final double bottomBarH = totalHeight - pad - photoH;
 
     final photoRect = Rect.fromLTWH(pad, pad, photoW, photoH);
     final baseSrcRect = Rect.fromLTWH(0, 0, baseImage.width.toDouble(), baseImage.height.toDouble());
@@ -105,10 +107,11 @@ class FrameCanvasRenderer {
     required double totalWidth,
     required double totalHeight,
   }) {
+    // 与 draw() 相同的逆向公式，保证预览/导出与镂空图层几何一致
     final double pad = totalWidth * (config.paddingRatio / (1 + config.paddingRatio * 2));
-    final double bottomBarH = totalHeight * (config.bottomBarRatio / (1 + config.paddingRatio + config.bottomBarRatio));
     final double photoW = totalWidth - pad * 2;
-    final double photoH = totalHeight - pad - bottomBarH;
+    final double photoH = (totalHeight - pad) / (1 + config.bottomBarRatio);
+    final double bottomBarH = totalHeight - pad - photoH;
     final photoRect = Rect.fromLTWH(pad, pad, photoW, photoH);
 
     // 1. 绘制全幅边框背景 (纸张纹理 / 纯色 / 渐变)

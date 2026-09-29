@@ -46,26 +46,50 @@ class DateTimeAutoSegmentFormatter extends TextInputFormatter {
     final trimmed = input.trim();
     if (trimmed.isEmpty) return '';
 
-    // 提取全部纯数字
-    final digits = trimmed.replaceAll(RegExp(r'\D'), '');
-    if (digits.length >= 8) {
-      final y = digits.substring(0, 4);
-      final m = digits.substring(4, 6);
-      final d = digits.substring(6, 8);
-      
-      if (digits.length >= 12) {
-        final hh = digits.substring(8, 10);
-        final mm = digits.substring(10, 12);
-        if (digits.length >= 14) {
-          final ss = digits.substring(12, 14);
-          return '$y.$m.$d $hh:$mm:$ss';
-        }
-        return '$y.$m.$d $hh:$mm';
-      }
-      return '$y.$m.$d';
+    // 按分隔符切出数字组，再逐组补零对齐，避免 "2024-8-21" 被拉平成 "2024821" 后错位解析
+    final groups = trimmed
+        .split(RegExp(r'\D+'))
+        .where((g) => g.isNotEmpty)
+        .toList();
+
+    int y = 0, m = 0, d = 0, hh = 0, mm = 0, ss = 0;
+    if (groups.length >= 3) {
+      y = int.tryParse(groups[0]) ?? 0;
+      m = int.tryParse(groups[1].padLeft(2, '0')) ?? 0;
+      d = int.tryParse(groups[2].padLeft(2, '0')) ?? 0;
+    } else if (groups.length == 1 && groups[0].length >= 8) {
+      // 纯数字连写：202408211430
+      final digits = groups[0];
+      y = int.tryParse(digits.substring(0, 4)) ?? 0;
+      m = int.tryParse(digits.substring(4, 6)) ?? 0;
+      d = int.tryParse(digits.substring(6, 8)) ?? 0;
+      if (digits.length >= 12) hh = int.tryParse(digits.substring(8, 10)) ?? 0;
+      if (digits.length >= 12) mm = int.tryParse(digits.substring(10, 12)) ?? 0;
+      if (digits.length >= 14) ss = int.tryParse(digits.substring(12, 14)) ?? 0;
+    } else {
+      return trimmed;
     }
 
-    return trimmed;
+    if (groups.length >= 4) hh = int.tryParse(groups[3].padLeft(2, '0')) ?? 0;
+    if (groups.length >= 5) mm = int.tryParse(groups[4].padLeft(2, '0')) ?? 0;
+    if (groups.length >= 6) ss = int.tryParse(groups[5].padLeft(2, '0')) ?? 0;
+
+    final dateValid = y >= 1 && m >= 1 && m <= 12 && d >= 1 && d <= 31;
+    if (!dateValid) return trimmed;
+
+    final y4 = y.toString().padLeft(4, '0');
+    final m2 = m.toString().padLeft(2, '0');
+    final d2 = d.toString().padLeft(2, '0');
+    if (hh > 0 || mm > 0 || ss > 0 || groups.length >= 4) {
+      final hh2 = hh.toString().padLeft(2, '0');
+      final mm2 = mm.toString().padLeft(2, '0');
+      final ss2 = ss.toString().padLeft(2, '0');
+      if (ss > 0 || groups.length >= 6) {
+        return '$y4.$m2.$d2 $hh2:$mm2:$ss2';
+      }
+      return '$y4.$m2.$d2 $hh2:$mm2';
+    }
+    return '$y4.$m2.$d2';
   }
 
   /// 获取当前时间标准格式化字符串

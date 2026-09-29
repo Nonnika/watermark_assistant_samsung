@@ -281,15 +281,15 @@ class WatermarkProcessor {
       Uint8List finalJpgBytes = jpgBytes;
 
       // 1. 若原图是 Ultra HDR 且输出 JPEG，则合成保持 Ultra HDR Gainmap 与 EXIF
-      final hasOrigBytes = originalBytes != null;
-      bool checkResult = false;
-      bool syncResult = false;
-      if (hasOrigBytes) {
-        checkResult = await UltraHdrService.checkIsUltraHdr(originalBytes);
-        syncResult = UltraHdrService.isUltraHdr(originalBytes);
+      bool isHdr = false;
+      if (originalBytes != null) {
+        // 原生检测通过即可短路，跳过 Dart 侧的字节扫描
+        isHdr = await UltraHdrService.checkIsUltraHdr(originalBytes);
+        if (!isHdr) {
+          isHdr = UltraHdrService.isUltraHdr(originalBytes);
+        }
       }
-      final isHdr = hasOrigBytes && (checkResult || syncResult);
-      if (isHdr) {
+      if (isHdr && originalBytes != null) {
         final double photoLeft = type == WatermarkType.frame ? pad : 0.0;
         final double photoTop = type == WatermarkType.frame ? pad : 0.0;
         final double photoW = originalW;
