@@ -85,7 +85,9 @@ void main() {
       name: 'sunset_gainmap.jpg',
       path: '/mock/sunset_gainmap.jpg',
     );
-    expect(DevicePhotoService.getCachedUltraHdr(hdrPhoto), isTrue);
+    expect(DevicePhotoService.getCachedUltraHdr(hdrPhoto), isNull);
+    expect(await DevicePhotoService.isUltraHdr(hdrPhoto), isFalse);
+    expect(DevicePhotoService.getCachedUltraHdr(hdrPhoto), isNull);
 
     const motionPhoto = DevicePhotoModel(
       id: 'motion_photo_1',

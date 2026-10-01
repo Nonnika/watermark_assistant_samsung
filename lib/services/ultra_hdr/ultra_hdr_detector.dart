@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// Ultra HDR 增益图 (Gainmap) 与元数据封装
@@ -29,200 +31,162 @@ class UltraHdrMetadata {
 
 /// Ultra HDR 图像检测：签名识别、Gainmap 提取与 XMP 参数解析
 class UltraHdrDetector {
-  static const MethodChannel _nativeChannel = MethodChannel('com.example.watermark_samsung/ultra_hdr');
+  static const MethodChannel _nativeChannel = MethodChannel(
+    'com.example.watermark_samsung/ultra_hdr',
+  );
 
-  /// 异步全方位检测是否为 Ultra HDR 图像 (优先请求 Android 14+ 系统级底层 Gainmap 解码器)
-  static Future<bool> checkIsUltraHdr(Uint8List bytes) async {
-    if (Platform.isAndroid) {
-      try {
-        final has = await _nativeChannel.invokeMethod<bool>('hasGainmap', {'bytes': bytes});
-        if (has == true) return true;
-      } catch (_) {}
-    }
-    return isUltraHdr(bytes);
-  }
+  @visibleForTesting
+  static bool? debugOverrideIsAndroid;
 
-  /// 检测字节流是否为 Ultra HDR 图像 (包含 Gainmap 增益图 / XMP / SEF 描述符)
-  static bool isUltraHdr(Uint8List bytes) {
-    if (bytes.length < 100) return false;
-
-    // 1. 扫描头部 512KB 与尾部 512KB (涵盖 Samsung SEFT 扩展区与 Google GContainer)
-    final headLen = bytes.length > 524288 ? 524288 : bytes.length;
-    final headStr = utf8.decode(bytes.sublist(0, headLen), allowMalformed: true);
-
-    final tailStart = bytes.length > 524288 ? bytes.length - 524288 : 0;
-    final tailStr = utf8.decode(bytes.sublist(tailStart), allowMalformed: true);
-
-    if (headStr.contains('http://ns.adobe.com/hdr-gain-map/1.0/') ||
-        headStr.contains('http://ns.apple.com/HDRGainMap/1.0/') ||
-        headStr.contains('urn:iso:std:iso:ts:21496:-1') ||
-        headStr.contains('hdrgm:Version') ||
-        headStr.contains('hdrgm:GainMapMin') ||
-        headStr.contains('Container:Directory') ||
-        headStr.contains('GContainer:Directory') ||
-        headStr.contains('DualShot_GainMap') ||
-        headStr.contains('HdrGainMap') ||
-        tailStr.contains('DualShot_GainMap') ||
-        tailStr.contains('HdrGainMap') ||
-        tailStr.contains('GainMap_Info') ||
-        tailStr.contains('SEFT') ||
-        tailStr.contains('http://ns.adobe.com/hdr-gain-map/1.0/')) {
-      return true;
-    }
-
-    // 2. 检查 JPEG 是否包含多图格式 MPF 标记 (0xFF 0xE2 + 'MPF\0')
-    if (bytes[0] == 0xFF && bytes[1] == 0xD8) {
-      int offset = 2;
-      while (offset + 4 < bytes.length) {
-        if (bytes[offset] != 0xFF) break;
-        final marker = bytes[offset + 1];
-        if (marker == 0xDA || marker == 0xD9) break; // SOS or EOI
-
-        final len = (bytes[offset + 2] << 8) | bytes[offset + 3];
-        if (marker == 0xE2 && offset + 4 + 4 <= bytes.length) {
-          final tag = String.fromCharCodes(bytes.sublist(offset + 4, offset + 8));
-          if (tag == 'MPF\x00') {
-            return true;
-          }
-        }
-        offset += 2 + len;
-      }
-
-      // 3. 检查是否有主图 EOI 后紧随的第二个 JPEG SOI
-      for (int i = 2; i < bytes.length - 3; i++) {
-        if (bytes[i] == 0xFF && bytes[i + 1] == 0xD9) {
-          for (int j = i + 2; j < bytes.length - 1; j++) {
-            if (bytes[j] == 0xFF && bytes[j + 1] == 0xD8) {
-              return true;
-            }
-          }
-        }
-      }
-    }
-
-    return false;
-  }
-
-  /// 提取 JPEG 中的 Gainmap 辅助增益图像字节流
-  static Uint8List? extractGainmapJpeg(Uint8List bytes) {
-    if (bytes.length < 100 || bytes[0] != 0xFF || bytes[1] != 0xD8) {
+  /// null 表示平台不支持或解码失败；false 是成功解码后的 SDR 结果。
+  static Future<bool?> checkNativeGainmap({
+    Uint8List? bytes,
+    String? path,
+    String? uri,
+  }) async {
+    if (!(debugOverrideIsAndroid ?? Platform.isAndroid)) return null;
+    try {
+      return await _nativeChannel.invokeMethod<bool>('hasGainmap', {
+        'bytes': ?bytes,
+        'path': ?path,
+        'uri': ?uri,
+      });
+    } catch (_) {
       return null;
     }
+  }
 
-    // 1. 动态遍历 JPEG 标记寻找 APP2 MPF 并精准解析 Image 2
-    int offset = 2;
-    while (offset + 4 < bytes.length) {
-      if (bytes[offset] != 0xFF) break;
-      final marker = bytes[offset + 1];
-      if (marker == 0xDA || marker == 0xD9) break;
+  /// 优先采用 Android 解码结果，仅在平台无法判定时解析 JPEG 增益图。
+  static Future<bool> checkIsUltraHdr(Uint8List bytes) async {
+    return await checkNativeGainmap(bytes: bytes) ?? isUltraHdr(bytes);
+  }
 
-      final len = (bytes[offset + 2] << 8) | bytes[offset + 3];
-      if (marker == 0xE2 && offset + 8 <= bytes.length) {
-        final tag = String.fromCharCodes(bytes.sublist(offset + 4, offset + 8));
-        if (tag == 'MPF\x00') {
-          final tiffOffset = offset + 8; // TIFF Header begins after 'MPF\0' (4 bytes)
-          try {
-            final isLe = bytes[tiffOffset] == 0x49 && bytes[tiffOffset + 1] == 0x49;
-            final isBe = bytes[tiffOffset] == 0x4D && bytes[tiffOffset + 1] == 0x4D;
-            if (isLe || isBe) {
-              int r16(int p) => isLe
-                  ? (bytes[p] | (bytes[p + 1] << 8))
-                  : ((bytes[p] << 8) | bytes[p + 1]);
-              int r32(int p) => isLe
-                  ? (bytes[p] | (bytes[p + 1] << 8) | (bytes[p + 2] << 16) | (bytes[p + 3] << 24))
-                  : ((bytes[p] << 24) | (bytes[p + 1] << 16) | (bytes[p + 2] << 8) | bytes[p + 3]);
+  /// HDR 必须包含增益图，普通 XMP 容器、MPF 或动态照片 SEF 不构成证据。
+  static bool isUltraHdr(Uint8List bytes) => extractGainmapJpeg(bytes) != null;
 
-              final ifdOffset = r32(tiffOffset + 4);
-              final numTags = r16(tiffOffset + ifdOffset);
-              int tagPos = tiffOffset + ifdOffset + 2;
+  /// 只提取带 HDR 元数据的附加 JPEG，或 SEF 目录明确命名的增益图。
+  static Uint8List? extractGainmapJpeg(Uint8List bytes) {
+    final primary = _readJpeg(bytes, 0);
+    if (primary == null) return null;
 
-              for (int t = 0; t < numTags; t++) {
-                final tagId = r16(tagPos);
-                if (tagId == 0xB002) { // MP Entry
-                  final entryOffset = r32(tagPos + 8);
-                  final entryAbsPos = tiffOffset + entryOffset;
-                  // Image 2 entry starts 16 bytes into MP Entry (Image 1 is 16 bytes)
-                  final img2Size = r32(entryAbsPos + 16 + 4);
-                  final img2Offset = r32(entryAbsPos + 16 + 8);
-                  final gainmapAbsOffset = tiffOffset + img2Offset;
+    final sefGainmap = _extractSefGainmap(bytes, primary.end);
+    if (sefGainmap != null) return sefGainmap;
 
-                  if (gainmapAbsOffset + img2Size <= bytes.length &&
-                      bytes[gainmapAbsOffset] == 0xFF &&
-                      bytes[gainmapAbsOffset + 1] == 0xD8) {
-                    return bytes.sublist(gainmapAbsOffset, gainmapAbsOffset + img2Size);
-                  }
-                }
-                tagPos += 12;
-              }
-            }
-          } catch (_) {}
+    // 从主图真正的 EOI 开始，跳过 APP1 内的 EXIF 缩略图。
+    // 不依赖 MPF 偏移：动态照片重新封装 XMP 后，旧偏移可能失效。
+    for (var start = primary.end; start + 2 < bytes.length; start++) {
+      if (bytes[start] != 0xff || bytes[start + 1] != 0xd8) continue;
+      final auxiliary = _readJpeg(bytes, start);
+      if (auxiliary == null) continue;
+      if (primary.hasHdrMetadata || auxiliary.hasHdrMetadata) {
+        return Uint8List.sublistView(bytes, start, auxiliary.end);
+      }
+      start = auxiliary.end - 1;
+    }
+    return null;
+  }
+
+  /// 解析 JPEG 标记与熵编码，验证完整扫描与 EOI，不把嵌入缩略图当主图。
+  static ({int end, bool hasHdrMetadata})? _readJpeg(
+    Uint8List bytes,
+    int start,
+  ) {
+    if (start + 2 > bytes.length ||
+        bytes[start] != 0xff ||
+        bytes[start + 1] != 0xd8) {
+      return null;
+    }
+    var offset = start + 2;
+    var inScan = false;
+    var hasScan = false;
+    var hasFrame = false;
+    var hasHdrMetadata = false;
+    while (offset < bytes.length) {
+      if (bytes[offset] != 0xff) {
+        if (!inScan) return null;
+        offset++;
+        continue;
+      }
+      while (offset < bytes.length && bytes[offset] == 0xff) {
+        offset++;
+      }
+      if (offset >= bytes.length) return null;
+      final marker = bytes[offset++];
+      if (marker == 0x00 || (marker >= 0xd0 && marker <= 0xd7)) {
+        if (!inScan) return null;
+        continue;
+      }
+      if (marker == 0xd9) {
+        return hasScan && hasFrame
+            ? (end: offset, hasHdrMetadata: hasHdrMetadata)
+            : null;
+      }
+      if (marker == 0xd8) return null;
+      if (marker == 0x01) continue;
+      if (offset + 2 > bytes.length) return null;
+      final length = (bytes[offset] << 8) | bytes[offset + 1];
+      final end = offset + length;
+      if (length < 2 || end > bytes.length) return null;
+      if (marker == 0xe1 || marker == 0xe2) {
+        final payload = latin1.decode(
+          Uint8List.sublistView(bytes, offset + 2, end),
+        );
+        if (marker == 0xe1 &&
+            payload.startsWith('http://ns.adobe.com/xap/1.0/\x00')) {
+          hasHdrMetadata |=
+              payload.contains('http://ns.adobe.com/hdr-gain-map/1.0/') ||
+              payload.contains('http://ns.apple.com/HDRGainMap/1.0/');
+        } else if (marker == 0xe2 &&
+            payload.startsWith('urn:iso:std:iso:ts:21496:-1\x00')) {
+          hasHdrMetadata |=
+              payload.length > 'urn:iso:std:iso:ts:21496:-1\x00'.length;
         }
       }
-      offset += 2 + len;
+      if (marker >= 0xc0 &&
+          marker <= 0xcf &&
+          marker != 0xc4 &&
+          marker != 0xc8 &&
+          marker != 0xcc) {
+        hasFrame = true;
+      }
+      inScan = marker == 0xda;
+      hasScan |= inScan;
+      offset = end;
     }
+    return null;
+  }
 
-    // 2. 扫描 Samsung SEFT 扩展尾部 (Samsung Galaxy 专有 DualShot_GainMap / HdrGainMap)
-    // SEF 布局: [主图][内嵌 Gainmap JPEG][SEFH 目录][sefDataSize(4)][SEFT(4)]
-    // Gainmap 位于 SEFH 目录之前，而非目录内部
-    if (bytes.length > 40) {
-      final len = bytes.length;
-      if (bytes[len - 4] == 0x53 &&
-          bytes[len - 3] == 0x45 &&
-          bytes[len - 2] == 0x46 &&
-          bytes[len - 1] == 0x54) { // 'SEFT'
-        final sefDataSize = (bytes[len - 8] & 0xFF) |
-            ((bytes[len - 7] & 0xFF) << 8) |
-            ((bytes[len - 6] & 0xFF) << 16) |
-            ((bytes[len - 5] & 0xFF) << 24);
-        if (sefDataSize > 0 && sefDataSize <= 65536 && len - 8 - sefDataSize > 2) {
-          final sefhAbs = len - 8 - sefDataSize;
-          // 从 SEFH 目录起点向前寻找最后一个内嵌 JPEG SOI，即为 Gainmap 起始
-          final scanStart = sefhAbs > (4 << 20) ? sefhAbs - (4 << 20) : 2;
-          for (int i = sefhAbs - 3; i >= scanStart; i--) {
-            if (bytes[i] == 0xFF && bytes[i + 1] == 0xD8 && bytes[i + 2] == 0xFF) {
-              return bytes.sublist(i, sefhAbs);
-            }
-          }
-        }
+  static Uint8List? _extractSefGainmap(Uint8List bytes, int primaryEnd) {
+    if (bytes.length < 28 ||
+        latin1.decode(bytes.sublist(bytes.length - 4)) != 'SEFT') {
+      return null;
+    }
+    final data = ByteData.sublistView(bytes);
+    int r32(int offset) => data.getUint32(offset, Endian.little);
+    final directory = bytes.length - 8 - r32(bytes.length - 8);
+    if (directory < primaryEnd ||
+        directory + 12 > bytes.length - 8 ||
+        latin1.decode(bytes.sublist(directory, directory + 4)) != 'SEFH') {
+      return null;
+    }
+    final count = r32(directory + 8);
+    if (count > (bytes.length - 8 - directory - 12) ~/ 12) return null;
+    for (var i = 0; i < count; i++) {
+      final entry = directory + 12 + i * 12;
+      final field = directory - r32(entry + 4);
+      final fieldEnd = field + r32(entry + 8);
+      if (field < primaryEnd || field + 8 > fieldEnd || fieldEnd > directory) {
+        continue;
+      }
+      final nameEnd = field + 8 + r32(field + 4);
+      if (nameEnd > fieldEnd) continue;
+      final name = latin1.decode(bytes.sublist(field + 8, nameEnd));
+      if (name != 'DualShot_GainMap' && name != 'HdrGainMap') continue;
+      final jpeg = _readJpeg(bytes, nameEnd);
+      if (jpeg != null && jpeg.end <= fieldEnd) {
+        return Uint8List.sublistView(bytes, nameEnd, jpeg.end);
       }
     }
-
-    // 3. 扫描 Google GContainer 目录声明的 GainMap 长度
-    final strHead = utf8.decode(bytes.sublist(0, bytes.length > 65536 ? 65536 : bytes.length), allowMalformed: true);
-    final gmReg = RegExp(r'Item:Semantic="GainMap"[^>]*Item:Length="(\d+)"|Item:Length="(\d+)"[^>]*Item:Semantic="GainMap"');
-    final gmMatch = gmReg.firstMatch(strHead);
-    if (gmMatch != null) {
-      final lenStr = gmMatch.group(1) ?? gmMatch.group(2);
-      final gmLen = int.tryParse(lenStr ?? '');
-      if (gmLen != null && gmLen > 0 && gmLen < bytes.length) {
-        final startPos = bytes.length - gmLen;
-        if (startPos >= 0 && bytes[startPos] == 0xFF && bytes[startPos + 1] == 0xD8) {
-          return bytes.sublist(startPos);
-        }
-      }
-    }
-
-    // 4. 备用方式：寻找主图 EOI (0xFF 0xD9) 之后紧随的第二个 SOI (0xFF 0xD8)
-    for (int i = 2; i < bytes.length - 3; i++) {
-      if (bytes[i] == 0xFF && bytes[i + 1] == 0xD9) {
-        for (int j = i + 2; j < bytes.length - 10; j++) {
-          if (bytes[j] == 0xFF && bytes[j + 1] == 0xD8 && bytes[j + 2] == 0xFF) {
-            return bytes.sublist(j);
-          }
-        }
-      }
-    }
-
-    // 5. 全局从文件尾部向前扫描最后一个有效 JPEG SOI
-    for (int i = bytes.length - 20; i >= 100; i--) {
-      if (bytes[i] == 0xFF && bytes[i + 1] == 0xD8) {
-        if (bytes[i + 2] == 0xFF &&
-            (bytes[i + 3] == 0xDB || bytes[i + 3] == 0xC0 || bytes[i + 3] == 0xE1 || bytes[i + 3] == 0xE0 || bytes[i + 3] == 0xC2)) {
-          return bytes.sublist(i);
-        }
-      }
-    }
-
     return null;
   }
 
@@ -235,7 +199,9 @@ class UltraHdrDetector {
 
     double getDoubleVal(List<String> keys, double fallback) {
       for (final key in keys) {
-        final reg = RegExp('$key="([^"]+)"|<hdrgm:$key>([^<]+)</hdrgm:$key>|<apgain:$key>([^<]+)</apgain:$key>');
+        final reg = RegExp(
+          '$key="([^"]+)"|<hdrgm:$key>([^<]+)</hdrgm:$key>|<apgain:$key>([^<]+)</apgain:$key>',
+        );
         final match = reg.firstMatch(strSample);
         if (match != null) {
           final val = match.group(1) ?? match.group(2) ?? match.group(3);
@@ -248,8 +214,16 @@ class UltraHdrDetector {
       return fallback;
     }
 
-    final minG = getDoubleVal(['GainMapMin', 'HDRGainMapMin', 'HDRGainMapCapacityMin'], 0.0);
-    final maxG = getDoubleVal(['GainMapMax', 'HDRGainMapMax', 'HDRGainMapCapacityMax'], 2.0);
+    final minG = getDoubleVal([
+      'GainMapMin',
+      'HDRGainMapMin',
+      'HDRGainMapCapacityMin',
+    ], 0.0);
+    final maxG = getDoubleVal([
+      'GainMapMax',
+      'HDRGainMapMax',
+      'HDRGainMapCapacityMax',
+    ], 2.0);
     final finalMaxG = maxG > minG ? maxG : 2.0;
 
     return UltraHdrMetadata(

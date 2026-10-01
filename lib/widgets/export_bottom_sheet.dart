@@ -12,7 +12,7 @@ class ExportBottomSheet extends StatefulWidget {
   final int currentIndex;
   final ui.Image? watermarkImage;
   final WatermarkConfig pngConfig;
-  final ui.Image? logoImage;
+  final Future<ui.Image?> Function(FrameWatermarkConfig config) resolveLogoImage;
   final FrameWatermarkConfig frameConfig;
 
   final bool isIndividualMode;
@@ -25,7 +25,7 @@ class ExportBottomSheet extends StatefulWidget {
     required this.currentIndex,
     required this.watermarkImage,
     required this.pngConfig,
-    required this.logoImage,
+    required this.resolveLogoImage,
     required this.frameConfig,
     this.isIndividualMode = false,
     this.initialExportAll = true,
@@ -101,16 +101,20 @@ class _ExportBottomSheetState extends State<ExportBottomSheet> {
               ? (item.individualPngConfig ?? widget.pngConfig)
               : widget.pngConfig;
 
-          final FrameWatermarkConfig curFrameConfig = widget.isIndividualMode
-              ? (item.individualFrameConfig ?? widget.frameConfig.copyWith(exifInfo: item.exifInfo))
-              : widget.frameConfig.copyWith(exifInfo: item.exifInfo);
+          final FrameWatermarkConfig curFrameConfig = (widget.isIndividualMode
+                  ? (item.individualFrameConfig ?? widget.frameConfig)
+                  : widget.frameConfig)
+              .copyWith(exifInfo: item.exifInfo);
+          final logoImage = widget.watermarkType == WatermarkType.frame
+              ? await widget.resolveLogoImage(curFrameConfig)
+              : null;
 
           final outputBytes = await WatermarkProcessor.compositeFullResolutionUnified(
             baseImage: baseImg,
             type: widget.watermarkType,
             watermarkImage: widget.watermarkImage,
             pngConfig: curPngConfig,
-            logoImage: widget.logoImage,
+            logoImage: logoImage,
             frameConfig: curFrameConfig,
             outputFormat: _format,
             originalBytes: item.bytes,

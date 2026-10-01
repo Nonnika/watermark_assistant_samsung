@@ -57,7 +57,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   // 全局边框 EXIF 水印状态
   FrameWatermarkConfig _globalFrameConfig = const FrameWatermarkConfig();
-  ui.Image? _decodedBrandLogo;
+  final Map<String, ui.Image> _decodedBrandLogos = {};
+  final Map<String, Future<ui.Image>> _pendingBrandLogos = {};
 
   bool _isLoading = false;
   final ImagePicker _picker = ImagePicker();
@@ -73,8 +74,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _initDefaultState() async {
-    final samsungBytes = await BrandLogoService.getLogoBytes('samsung_blue');
-    final samsungDecoded = await WatermarkProcessor.decodeImageFromBytes(samsungBytes);
+    await _resolveBrandLogo(_globalFrameConfig);
 
     final defaultPreset = PresetWatermarkService.presets.first;
     final wmBytes = await defaultPreset.generateBytes();
@@ -82,7 +82,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
     if (mounted) {
       setState(() {
-        _decodedBrandLogo = samsungDecoded;
         _watermarkBytes = wmBytes;
         _decodedWatermark = wmDecoded;
         _watermarkName = defaultPreset.title;
@@ -120,7 +119,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   void _updateFrameConfig(FrameWatermarkConfig newConfig) {
     setState(() {
-      _globalFrameConfig = newConfig;
+      if (!_isIndividualMode) {
+        _globalFrameConfig = newConfig;
+      }
       if (_images.isNotEmpty && _selectedImageIndex < _images.length) {
         _images[_selectedImageIndex] = _images[_selectedImageIndex].copyWith(
           exifInfo: newConfig.exifInfo,
@@ -128,6 +129,44 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         );
       }
     });
+    _refreshBrandLogo();
+  }
+
+  ui.Image? _brandLogoForConfig(FrameWatermarkConfig config) {
+    if (config.selectedLogoId.startsWith('custom_') ||
+        config.selectedLogoId == 'custom') {
+      final custom = config.customLogoDecoded;
+      if (custom != null) return custom;
+    }
+    return _decodedBrandLogos[config.selectedLogoId];
+  }
+
+  Future<ui.Image> _resolveBrandLogo(FrameWatermarkConfig config) async {
+    final cached = _brandLogoForConfig(config);
+    if (cached != null) return cached;
+
+    final id = config.selectedLogoId;
+    final pending = _pendingBrandLogos.putIfAbsent(id, () async {
+      final bytes = await BrandLogoService.getLogoBytes(
+        id,
+        customBytes: config.customLogoBytes,
+      );
+      return WatermarkProcessor.decodeImageFromBytes(bytes);
+    });
+    try {
+      final decoded = await pending;
+      _decodedBrandLogos[id] = decoded;
+      return decoded;
+    } finally {
+      _pendingBrandLogos.remove(id);
+    }
+  }
+
+  Future<void> _refreshBrandLogo() async {
+    if (_brandLogoForConfig(_activeFrameConfig) != null) return;
+    await _resolveBrandLogo(_activeFrameConfig);
+    // 完成后按当前配置取缓存，过期解码结果不会替换另一张照片的 Logo。
+    if (mounted) setState(() {});
   }
 
   Future<void> _refreshPhotoPalette() async {
@@ -177,6 +216,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           _selectedImageIndex = 0;
         });
         _refreshPhotoPalette();
+        _refreshBrandLogo();
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
@@ -231,6 +271,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         _watermarkType = WatermarkType.frame;
       });
       _refreshPhotoPalette();
+      _refreshBrandLogo();
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
       if (mounted) {
@@ -387,9 +428,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           images: _images,
           currentIndex: _selectedImageIndex,
           watermarkImage: _decodedWatermark,
-          pngConfig: _activePngConfig,
-          logoImage: _decodedBrandLogo,
-          frameConfig: _activeFrameConfig,
+          pngConfig: _globalPngConfig,
+          resolveLogoImage: _resolveBrandLogo,
+          frameConfig: _globalFrameConfig,
           isIndividualMode: _isIndividualMode,
           initialExportAll: exportAll,
         );
@@ -401,20 +442,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void _onToggleIndividualMode(bool val) {
     setState(() {
       _isIndividualMode = val;
-      if (val && _images[_selectedImageIndex].individualPngConfig == null) {
-        _images[_selectedImageIndex] = _images[_selectedImageIndex].copyWith(
-          individualPngConfig: _globalPngConfig,
-          individualFrameConfig: _globalFrameConfig.copyWith(
-            exifInfo: _images[_selectedImageIndex].exifInfo,
-          ),
+      if (val && _images.isNotEmpty) {
+        final item = _images[_selectedImageIndex];
+        _images[_selectedImageIndex] = item.copyWith(
+          individualPngConfig: item.individualPngConfig ?? _globalPngConfig,
+          individualFrameConfig: item.individualFrameConfig ??
+              _globalFrameConfig.copyWith(exifInfo: item.exifInfo),
         );
       }
     });
+    _refreshBrandLogo();
   }
 
   void _onPreviewIndexChanged(int idx) {
     setState(() => _selectedImageIndex = idx);
     _refreshPhotoPalette();
+    _refreshBrandLogo();
   }
 
   void _onWatermarkDragged(double relX, double relY) {
@@ -448,28 +491,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       _selectedImageIndex = 0;
     });
     _refreshPhotoPalette();
-  }
-
-  /// FrameControls 配置变更：若切换了品牌 Logo 则先解码新 Logo 再应用配置
-  Future<void> _onFrameControlsChanged(FrameWatermarkConfig newCfg) async {
-    if (newCfg.selectedLogoId != _activeFrameConfig.selectedLogoId) {
-      if (newCfg.customLogoDecoded != null && newCfg.selectedLogoId.startsWith('custom_')) {
-        setState(() {
-          _decodedBrandLogo = newCfg.customLogoDecoded;
-        });
-      } else {
-        final logoBytes = await BrandLogoService.getLogoBytes(
-          newCfg.selectedLogoId,
-          customBytes: newCfg.customLogoBytes,
-        );
-        final decoded = await WatermarkProcessor.decodeImageFromBytes(logoBytes);
-        if (!mounted) return;
-        setState(() {
-          _decodedBrandLogo = decoded;
-        });
-      }
-    }
-    _updateFrameConfig(newCfg);
+    _refreshBrandLogo();
   }
 
   @override
@@ -517,7 +539,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     activeToolIndex: _activeToolIndex,
                     decodedWatermark: _decodedWatermark,
                     activePngConfig: _activePngConfig,
-                    decodedBrandLogo: _decodedBrandLogo,
+                    decodedBrandLogo: _brandLogoForConfig(_activeFrameConfig),
                     activeFrameConfig: _activeFrameConfig,
                     isIndividualMode: _isIndividualMode,
                     isAdjusting: _isAdjusting,
@@ -533,7 +555,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     onWatermarkDragged: _onWatermarkDragged,
                     onPngConfigChanged: _updatePngConfig,
                     onFrameConfigChanged: _updateFrameConfig,
-                    onFrameControlsChanged: _onFrameControlsChanged,
+                    onFrameControlsChanged: _updateFrameConfig,
                     onParamAdjusting: _onParamAdjusting,
                     onParamAdjustEnd: _onParamAdjustEnd,
                     onExport: (exportAll) => _openExportSheet(exportAll: exportAll),

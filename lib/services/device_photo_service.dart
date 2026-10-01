@@ -262,15 +262,7 @@ class DevicePhotoService {
 
   /// 同步获取 Ultra HDR 识别缓存
   static bool? getCachedUltraHdr(DevicePhotoModel photo) {
-    if (_ultraHdrCache.containsKey(photo.id)) {
-      return _ultraHdrCache[photo.id];
-    }
-    final lowerName = photo.name.toLowerCase();
-    if (lowerName.contains('hdr') || lowerName.contains('gainmap')) {
-      _ultraHdrCache[photo.id] = true;
-      return true;
-    }
-    return null;
+    return _ultraHdrCache[photo.id];
   }
 
   /// 获取图片缩略图 (带内存高速缓存 + 并发控制队列)
@@ -369,7 +361,7 @@ class DevicePhotoService {
   static Future<Uint8List?> getFullPhotoBytes(DevicePhotoModel photo) async {
     if (photo.directBytes != null) return photo.directBytes;
 
-    if (Platform.isAndroid && (photo.uri != null || photo.path.isNotEmpty)) {
+    if (_isAndroid && (photo.uri != null || photo.path.isNotEmpty)) {
       try {
         final Uint8List? bytes = await _channel.invokeMethod<Uint8List>('getPhotoBytes', {
           'path': photo.path,
@@ -481,48 +473,22 @@ class DevicePhotoService {
 
   /// 检查照片是否为 Ultra HDR (包含 Gainmap 增益图 / Apple HDR / ISO 21496-1)
   static Future<bool> isUltraHdr(DevicePhotoModel photo) async {
-    if (_ultraHdrCache.containsKey(photo.id)) {
-      return _ultraHdrCache[photo.id]!;
+    final cached = _ultraHdrCache[photo.id];
+    if (cached != null) return cached;
+
+    if (photo.directBytes == null && _isAndroid) {
+      final native = await UltraHdrService.checkPhotoGainmap(path: photo.path, uri: photo.uri);
+      if (native != null) {
+        _ultraHdrCache[photo.id] = native;
+        return native;
+      }
     }
-
-    final lowerName = photo.name.toLowerCase();
-    if (lowerName.contains('gainmap')) {
-      _ultraHdrCache[photo.id] = true;
-      return true;
-    }
-
-    if (photo.directBytes != null) {
-      final isHdr = UltraHdrService.isUltraHdr(photo.directBytes!);
-      _ultraHdrCache[photo.id] = isHdr;
-      return isHdr;
-    }
-
-    if (photo.path.isNotEmpty) {
-      try {
-        final file = File(photo.path);
-        if (await file.exists()) {
-          final length = await file.length();
-          if (length > 2048) {
-            final raf = await file.open(mode: FileMode.read);
-            final headSize = length > 65536 ? 65536 : length;
-            final headerBytes = await raf.read(headSize);
-            final tailReadSize = length > 65536 ? 65536 : length;
-            await raf.setPosition(length - tailReadSize);
-            final tailBytes = await raf.read(tailReadSize.toInt());
-            await raf.close();
-
-            final isHdr = UltraHdrService.isUltraHdr(headerBytes) || UltraHdrService.isUltraHdr(tailBytes);
-            if (isHdr) {
-              _ultraHdrCache[photo.id] = true;
-              return true;
-            }
-          }
-        }
-      } catch (_) {}
-    }
-
-    _ultraHdrCache[photo.id] = false;
-    return false;
+    // 用完整原图统一判定；分开的头尾片段无法验证 MPF / 增益图结构。
+    final bytes = await getFullPhotoBytes(photo);
+    if (bytes == null || bytes.isEmpty) return false; // 读取失败不缓存，允许重试。
+    final isHdr = await UltraHdrService.checkIsUltraHdr(bytes);
+    _ultraHdrCache[photo.id] = isHdr;
+    return isHdr;
   }
 
   /// 批量并发检测动态照片 (Android 原生 Snapdragon 多核并行加速 + 渐进式流式返回)

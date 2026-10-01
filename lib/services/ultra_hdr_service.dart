@@ -23,7 +23,11 @@ class UltraHdrService {
   /// 异步全方位检测是否为 Ultra HDR 图像 (优先请求 Android 14+ 系统级底层 Gainmap 解码器)
   static Future<bool> checkIsUltraHdr(Uint8List bytes) => UltraHdrDetector.checkIsUltraHdr(bytes);
 
-  /// 检测字节流是否为 Ultra HDR 图像 (包含 Gainmap 增益图 / XMP / SEF 描述符)
+  /// 直接从相册 URI / 路径检测，null 表示需要读取原图后回退。
+  static Future<bool?> checkPhotoGainmap({String? path, String? uri}) =>
+      UltraHdrDetector.checkNativeGainmap(path: path, uri: uri);
+
+  /// 检测完整 JPEG 是否包含带 HDR 元数据的实际 Gainmap 增益图
   static bool isUltraHdr(Uint8List bytes) => UltraHdrDetector.isUltraHdr(bytes);
 
   /// 提取 JPEG 中的 Gainmap 辅助增益图像字节流

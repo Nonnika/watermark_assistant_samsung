@@ -10,6 +10,7 @@ import android.graphics.ImageDecoder
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
+import android.net.Uri
 import android.os.Build
 import android.os.Process
 import android.util.Log
@@ -29,37 +30,40 @@ class UltraHdrEncoder(
     private val heavyTaskExecutor: ExecutorService
 ) {
     fun hasGainmap(call: MethodCall, result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            result.success(null) // 不支持检测，Dart 可解析完整 JPEG 回退。
+            return
+        }
         val bytes = call.argument<ByteArray>("bytes")
-        if (bytes != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            // 高通 SoC 优化：Gainmap 探测需要完整解码原图，移出主线程并启用 ADPF 提速
-            heavyTaskExecutor.execute {
-                Process.setThreadPriority(Process.THREAD_PRIORITY_LESS_FAVORABLE)
-                val has = activity.runWithAdpfBoost(50L) {
-                    try {
-                        val source = ImageDecoder.createSource(ByteBuffer.wrap(bytes))
-                        val bitmap = ImageDecoder.decodeBitmap(source) { _, _, _ -> }
-                        val has = bitmap.hasGainmap()
-                        Log.d(TAG_UHDR, "hasGainmap: $has, bitmap=${bitmap.width}x${bitmap.height}, config=${bitmap.config}")
-                        bitmap.recycle()
-                        has
-                    } catch (e: Exception) {
-                        Log.e(TAG_UHDR, "hasGainmap ImageDecoder failed: ${e.message}, trying BitmapFactory")
-                        try {
-                            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                            val has = bitmap?.hasGainmap() == true
-                            Log.d(TAG_UHDR, "hasGainmap (BitmapFactory fallback): $has")
-                            bitmap?.recycle()
-                            has
-                        } catch (e2: Exception) {
-                            Log.e(TAG_UHDR, "hasGainmap BitmapFactory also failed: ${e2.message}")
-                            false
-                        }
+        val path = call.argument<String>("path")
+        val uri = call.argument<String>("uri")
+        heavyTaskExecutor.execute {
+            Process.setThreadPriority(Process.THREAD_PRIORITY_LESS_FAVORABLE)
+            val has: Boolean? = activity.runWithAdpfBoost(50L) {
+                try {
+                    val source = when {
+                        bytes != null -> ImageDecoder.createSource(ByteBuffer.wrap(bytes))
+                        !uri.isNullOrEmpty() -> ImageDecoder.createSource(activity.contentResolver, Uri.parse(uri))
+                        !path.isNullOrEmpty() -> ImageDecoder.createSource(File(path))
+                        else -> return@runWithAdpfBoost null
                     }
+                    val bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                        // 采样仍保留增益图，避免相册并发探测时解码多张全分辨率照片。
+                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                        val sample = ((maxOf(info.size.width, info.size.height) + 255) / 256).coerceAtLeast(1)
+                        decoder.setTargetSampleSize(sample)
+                    }
+                    try {
+                        bitmap.hasGainmap()
+                    } finally {
+                        bitmap.recycle()
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG_UHDR, "hasGainmap decode failed: ${e.message}")
+                    null // 解码失败不等于 SDR，也不能写入相册的否定缓存。
                 }
-                activity.runOnUiThread { result.success(has) }
             }
-        } else {
-            result.success(false)
+            activity.runOnUiThread { result.success(has) }
         }
     }
 
