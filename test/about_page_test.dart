@@ -29,7 +29,7 @@ void main() {
 
     // Verify Samsung One UI AboutPage content
     expect(find.text('水印助手'), findsWidgets);
-    expect(find.text('版本 1.0.00.01'), findsOneWidget);
+    expect(find.text('版本 2.1.0 (2)'), findsOneWidget);
     expect(find.text('已安装最新版本。'), findsOneWidget);
     expect(find.text('条款与条件'), findsOneWidget);
     expect(find.text('开源许可证'), findsOneWidget);

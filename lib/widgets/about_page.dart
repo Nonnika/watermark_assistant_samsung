@@ -95,7 +95,7 @@ class AboutPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 14),
                     const Text(
-                      '版本 1.0.00.01',
+                      '版本 2.1.0 (2)',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 15,
@@ -143,7 +143,7 @@ class AboutPage extends StatelessWidget {
                         showLicensePage(
                           context: context,
                           applicationName: AppStrings.appName,
-                          applicationVersion: '1.0.00.01',
+                          applicationVersion: '2.1.0 (2)',
                           applicationLegalese: 'Copyright © 2026 Watermark Assistant. All rights reserved.',
                         );
                       },
