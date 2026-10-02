@@ -297,17 +297,20 @@ class _CardStackPreviewState extends State<CardStackPreview>
                       child: SizedBox(
                         width: containerW,
                         height: containerH,
-                        child: CustomPaint(
-                          size: Size(containerW, containerH),
-                          painter: ActivePhotoPainter(
-                            watermarkType: widget.watermarkType,
-                            baseImage: activeItem.decodedImage,
-                            rawBytes: activeItem.bytes,
-                            watermarkImage: widget.watermarkImage,
-                            config: widget.pngConfig,
-                            logoImage: widget.logoImage,
-                            frameConfig: widget.frameConfig,
-                            renderRect: renderRect,
+                        // 切牌只变换此图层，避免每帧重新绘制照片、相框和模糊背景。
+                        child: RepaintBoundary(
+                          child: CustomPaint(
+                            size: Size(containerW, containerH),
+                            isComplex: true,
+                            painter: ActivePhotoPainter(
+                              watermarkType: widget.watermarkType,
+                              baseImage: activeItem.decodedImage,
+                              watermarkImage: widget.watermarkImage,
+                              config: widget.pngConfig,
+                              logoImage: widget.logoImage,
+                              frameConfig: widget.frameConfig,
+                              renderRect: renderRect,
+                            ),
                           ),
                         ),
                       ),

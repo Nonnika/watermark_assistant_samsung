@@ -4,11 +4,13 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'motion_photo_service.dart';
+import 'photos/thumbnail_loader.dart';
 import 'ultra_hdr_service.dart';
+
+export 'photos/thumbnail_loader.dart' show ThumbnailRequest;
 
 class DevicePhotoModel {
   final String id;
@@ -17,6 +19,7 @@ class DevicePhotoModel {
   final String? uri;
   final int size;
   final int dateAdded;
+  final int dateModified;
   final int width;
   final int height;
   final String mimeType;
@@ -30,6 +33,7 @@ class DevicePhotoModel {
     this.uri,
     this.size = 0,
     this.dateAdded = 0,
+    this.dateModified = 0,
     this.width = 0,
     this.height = 0,
     this.mimeType = 'image/jpeg',
@@ -58,44 +62,56 @@ class DevicePhotoModel {
 
 class DevicePhotoService {
   static const MethodChannel _channel = MethodChannel('com.example.watermark_samsung/ultra_hdr');
-  static final Map<String, Uint8List> _thumbnailMemoryCache = {};
-  static const int _maxThumbnailCacheEntries = 600;
+  static final _thumbnails = ThumbnailLoader();
+  // Stable identity without retaining the full source bytes in cache keys.
+  static final _byteSourceKeys = Expando<Object>();
 
-  static void _storeThumbnail(String key, Uint8List bytes) {
-    if (_thumbnailMemoryCache.length >= _maxThumbnailCacheEntries) {
-      _thumbnailMemoryCache.remove(_thumbnailMemoryCache.keys.first);
-    }
-    _thumbnailMemoryCache[key] = bytes;
-  }
+  static Object? _byteSourceKey(Uint8List? bytes) =>
+      bytes == null ? null : (_byteSourceKeys[bytes] ??= Object());
 
-  /// 用引擎原生解码器把整图字节降采样为 ≤[size] 宽的 JPEG 缩略图
-  static Future<Uint8List?> _downscaleToThumbnail(Uint8List bytes, int size) async {
+  // Include the source and its revision so a refreshed MediaStore item cannot
+  // reuse a thumbnail from an edited photo or a different URI with the same ID.
+  static Object _thumbnailKey(DevicePhotoModel photo, int size) => (
+    photo.id, photo.path, photo.uri, photo.size, photo.dateAdded,
+    photo.dateModified, _byteSourceKey(photo.directBytes), size,
+  );
+
+  static void clearThumbnailCache() => _thumbnails.clearCache();
+
+  /// Decode at a bounded size, keeping full file bytes out of the Dart heap.
+  /// PNG encoding runs in the engine instead of a synchronous Dart JPEG loop.
+  static Future<Uint8List?> _downscaleToThumbnail(
+    DevicePhotoModel photo,
+    int size,
+  ) async {
+    ui.ImmutableBuffer? buffer;
+    ui.ImageDescriptor? descriptor;
+    ui.Codec? codec;
+    ui.Image? image;
     try {
-      final codec = await ui.instantiateImageCodec(bytes, targetWidth: size);
-      final frame = await codec.getNextFrame();
-      final image = frame.image;
-      final rgba = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-      final w = image.width;
-      final h = image.height;
-      image.dispose();
-      if (rgba == null) return null;
-      final decoded = img.Image.fromBytes(
-        width: w,
-        height: h,
-        bytes: rgba.buffer,
-        order: img.ChannelOrder.rgba,
+      buffer = photo.directBytes != null
+          ? await ui.ImmutableBuffer.fromUint8List(photo.directBytes!)
+          : await ui.ImmutableBuffer.fromFilePath(photo.path);
+      descriptor = await ui.ImageDescriptor.encoded(buffer);
+      final longest = descriptor.width > descriptor.height
+          ? descriptor.width : descriptor.height;
+      final scale = longest > size ? size / longest : 1.0;
+      codec = await descriptor.instantiateCodec(
+        targetWidth: (descriptor.width * scale).round().clamp(1, size),
+        targetHeight: (descriptor.height * scale).round().clamp(1, size),
       );
-      return Uint8List.fromList(img.encodeJpg(decoded, quality: 85));
+      image = (await codec.getNextFrame()).image;
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      return data?.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
     } catch (_) {
       return null;
+    } finally {
+      image?.dispose();
+      codec?.dispose();
+      descriptor?.dispose();
+      buffer?.dispose();
     }
   }
-
-  // ─── 缩略图加载队列：防止同时启动大量原生调用导致主线程拥塞 ───
-  static const int _maxConcurrentThumbnailLoads = 6;
-  static int _activeThumbnailLoads = 0;
-  static final List<Completer<Uint8List?>> _pendingThumbCompleters = [];
-  static final List<_ThumbLoadTask> _pendingThumbTasks = [];
 
   @visibleForTesting
   static bool? debugOverrideIsAndroid;
@@ -158,6 +174,7 @@ class DevicePhotoService {
                   uri: item['uri']?.toString(),
                   size: (item['size'] as num?)?.toInt() ?? 0,
                   dateAdded: (item['dateAdded'] as num?)?.toInt() ?? 0,
+                  dateModified: (item['dateModified'] as num?)?.toInt() ?? 0,
                   width: (item['width'] as num?)?.toInt() ?? 0,
                   height: (item['height'] as num?)?.toInt() ?? 0,
                   mimeType: item['mimeType']?.toString() ?? 'image/jpeg',
@@ -224,6 +241,7 @@ class DevicePhotoService {
                   path: entity.path,
                   size: stat.size,
                   dateAdded: (stat.modified.millisecondsSinceEpoch / 1000).round(),
+                  dateModified: stat.modified.millisecondsSinceEpoch,
                 ),
               );
               if (limit > 0 && results.length >= limit) break;
@@ -242,9 +260,7 @@ class DevicePhotoService {
   /// 同步获取缩略图内存缓存 (首帧零延迟渲染, 彻底消除黑块闪烁)
   static Uint8List? getCachedThumbnail(DevicePhotoModel photo, {int size = 256}) {
     if (photo.cachedThumbnail != null) return photo.cachedThumbnail;
-    if (photo.directBytes != null) return photo.directBytes;
-    final cacheKey = '${photo.id}_$size';
-    return _thumbnailMemoryCache[cacheKey];
+    return _thumbnails.getCached(_thumbnailKey(photo, size));
   }
 
   /// 同步获取动态照片识别缓存
@@ -265,95 +281,61 @@ class DevicePhotoService {
     return _ultraHdrCache[photo.id];
   }
 
-  /// 获取图片缩略图 (带内存高速缓存 + 并发控制队列)
-  static Future<Uint8List?> getThumbnail(DevicePhotoModel photo, {int size = 256}) async {
-    if (photo.cachedThumbnail != null) return photo.cachedThumbnail;
-    if (photo.directBytes != null) return photo.directBytes;
-
-    final cacheKey = '${photo.id}_$size';
-    if (_thumbnailMemoryCache.containsKey(cacheKey)) {
-      return _thumbnailMemoryCache[cacheKey];
+  /// Visible cards keep a request handle so offscreen queued work can be dropped.
+  static ThumbnailRequest requestThumbnail(
+    DevicePhotoModel photo, {
+    int size = 256,
+    bool prefetch = false,
+  }) {
+    if (size <= 0) throw ArgumentError.value(size, 'size', 'Must be positive');
+    if (photo.cachedThumbnail != null) {
+      return ThumbnailRequest.completed(photo.cachedThumbnail);
     }
-
-    // 队列控制: 避免同时超过 N 个原生缩略图解码调用
-    if (_activeThumbnailLoads >= _maxConcurrentThumbnailLoads) {
-      final completer = Completer<Uint8List?>();
-      _pendingThumbCompleters.add(completer);
-      _pendingThumbTasks.add(_ThumbLoadTask(photo: photo, size: size, cacheKey: cacheKey));
-      return completer.future;
-    }
-
-    return _executeThumbnailLoad(photo, size, cacheKey);
+    return _thumbnails.request(
+      _thumbnailKey(photo, size),
+      () => _loadThumbnail(photo, size),
+      prefetch: prefetch,
+    );
   }
 
-  static Future<Uint8List?> _executeThumbnailLoad(DevicePhotoModel photo, int size, String cacheKey) async {
-    _activeThumbnailLoads++;
-    Uint8List? result;
-    try {
-      // 1. 原生 Android 缩略图生成 (含 Q+ MediaStore API 与高效采样)
-      if (Platform.isAndroid) {
-        try {
-          final Uint8List? thumbBytes = await _channel.invokeMethod<Uint8List>('getPhotoThumbnail', {
-            'id': photo.id,
-            'path': photo.path,
-            'width': size,
-            'height': size,
-          });
-          if (thumbBytes != null && thumbBytes.isNotEmpty) {
-            _storeThumbnail(cacheKey, thumbBytes);
-            result = thumbBytes;
-          }
-        } catch (_) {}
-      }
+  /// Calls for the same source and size share one queued or active decode.
+  static Future<Uint8List?> getThumbnail(DevicePhotoModel photo, {int size = 256}) =>
+      requestThumbnail(photo, size: size).bytes;
 
-      // 2. 本地文件读取回退 (降采样为真正的缩略图，避免把整张原图永久驻留内存)
-      if (result == null && photo.path.isNotEmpty) {
-        try {
-          final file = File(photo.path);
-          if (await file.exists()) {
-            final bytes = await file.readAsBytes();
-            final thumb = await _downscaleToThumbnail(bytes, size);
-            if (thumb != null) {
-              _storeThumbnail(cacheKey, thumb);
-              result = thumb;
-            }
-          }
-        } catch (_) {}
-      }
-    } finally {
-      _activeThumbnailLoads--;
-      _drainThumbnailQueue();
+  static Future<Uint8List?> _loadThumbnail(DevicePhotoModel photo, int size) async {
+    if (photo.directBytes == null && _isAndroid) {
+      try {
+        final bytes = await _channel.invokeMethod<Uint8List>('getPhotoThumbnail', {
+          'id': photo.id,
+          'path': photo.path,
+          'uri': photo.uri,
+          'width': size,
+          'height': size,
+        });
+        if (bytes != null && bytes.isNotEmpty) return bytes;
+      } catch (_) {}
     }
-
-    return result;
+    if (photo.directBytes != null || photo.path.isNotEmpty) {
+      return _downscaleToThumbnail(photo, size);
+    }
+    return null;
   }
 
-  static void _drainThumbnailQueue() {
-    while (_pendingThumbCompleters.isNotEmpty && _activeThumbnailLoads < _maxConcurrentThumbnailLoads) {
-      final completer = _pendingThumbCompleters.removeAt(0);
-      final task = _pendingThumbTasks.removeAt(0);
-      // 检查缓存命中（等待期间可能已由其他任务加载）
-      if (_thumbnailMemoryCache.containsKey(task.cacheKey)) {
-        completer.complete(_thumbnailMemoryCache[task.cacheKey]);
-      } else {
-        _executeThumbnailLoad(task.photo, task.size, task.cacheKey).then(
-          completer.complete,
-          onError: (e) => completer.complete(null),
-        );
-      }
+  /// Prefetch yields queue priority to visible cells and stops between batches
+  /// when the selector that initiated it has gone away.
+  static Future<void> preloadThumbnails(
+    List<DevicePhotoModel> photos, {
+    int size = 256,
+    int batchSize = 4,
+    bool Function()? shouldContinue,
+  }) async {
+    if (batchSize <= 0) {
+      throw ArgumentError.value(batchSize, 'batchSize', 'Must be positive');
     }
-  }
-
-  /// 批量预热缩略图缓存 (只加载尚未缓存的, 带并发限制)
-  static Future<void> preloadThumbnails(List<DevicePhotoModel> photos, {int size = 256, int batchSize = 8}) async {
-    final uncached = photos.where((p) {
-      final key = '${p.id}_$size';
-      return !_thumbnailMemoryCache.containsKey(key) && p.cachedThumbnail == null && p.directBytes == null;
-    }).toList();
-
-    for (int i = 0; i < uncached.length; i += batchSize) {
-      final batch = uncached.skip(i).take(batchSize).toList();
-      await Future.wait(batch.map((p) => getThumbnail(p, size: size)));
+    for (int i = 0; i < photos.length; i += batchSize) {
+      if (shouldContinue != null && !shouldContinue()) return;
+      await Future.wait(photos.skip(i).take(batchSize).map((photo) =>
+          requestThumbnail(photo, size: size, prefetch: true).bytes));
     }
   }
 
@@ -546,11 +528,4 @@ class DevicePhotoService {
     }
     return result;
   }
-}
-
-class _ThumbLoadTask {
-  final DevicePhotoModel photo;
-  final int size;
-  final String cacheKey;
-  const _ThumbLoadTask({required this.photo, required this.size, required this.cacheKey});
 }

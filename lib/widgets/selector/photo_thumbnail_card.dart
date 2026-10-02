@@ -25,82 +25,82 @@ class PhotoThumbnailCard extends StatefulWidget {
   State<PhotoThumbnailCard> createState() => _PhotoThumbnailCardState();
 }
 
-class _PhotoThumbnailCardState extends State<PhotoThumbnailCard> with AutomaticKeepAliveClientMixin {
+class _PhotoThumbnailCardState extends State<PhotoThumbnailCard> {
   Uint8List? _thumbBytes;
   bool _loading = true;
   bool _isMotionPhoto = false;
   bool _isUltraHdr = false;
-  bool _disposed = false;
-
-  @override
-  bool get wantKeepAlive => true;
+  ThumbnailRequest? _request;
+  int _generation = 0;
 
   @override
   void initState() {
     super.initState();
-    // 立即同步从内存缓存获取（首帧命中即刻展示，0 延时 0 闪烁）
-    final cached = DevicePhotoService.getCachedThumbnail(widget.photo, size: 256);
-    if (cached != null) {
-      _thumbBytes = cached;
-      _loading = false;
-    }
-    final cachedMotion = DevicePhotoService.getCachedMotionPhoto(widget.photo);
-    if (cachedMotion != null) {
-      _isMotionPhoto = cachedMotion;
-    }
-    final cachedHdr = DevicePhotoService.getCachedUltraHdr(widget.photo);
-    if (cachedHdr != null) {
-      _isUltraHdr = cachedHdr;
-    }
-
-    if (_thumbBytes == null || cachedMotion == null || cachedHdr == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_disposed) {
-          if (_thumbBytes == null) _loadThumbnail();
-          if (cachedMotion == null) _checkMotionPhoto();
-          if (cachedHdr == null) _checkUltraHdr();
-        }
-      });
-    }
+    _resetPhoto();
   }
 
   @override
+  void didUpdateWidget(covariant PhotoThumbnailCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.photo != widget.photo) _resetPhoto();
+  }
+
+  void _resetPhoto() {
+    _request?.cancel();
+    _request = null;
+    final generation = ++_generation;
+    final photo = widget.photo;
+    _thumbBytes = DevicePhotoService.getCachedThumbnail(photo);
+    _loading = _thumbBytes == null;
+    _isMotionPhoto = DevicePhotoService.getCachedMotionPhoto(photo) ?? false;
+    _isUltraHdr = DevicePhotoService.getCachedUltraHdr(photo) ?? false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isCurrent(generation)) _loadPhoto(photo, generation);
+    });
+  }
+
+  bool _isCurrent(int generation) => mounted && generation == _generation;
+
+  @override
   void dispose() {
-    _disposed = true;
+    _request?.cancel();
     super.dispose();
   }
 
-  Future<void> _loadThumbnail() async {
-    final bytes = await DevicePhotoService.getThumbnail(widget.photo, size: 256);
-    if (!_disposed && mounted) {
+  Future<void> _loadPhoto(DevicePhotoModel photo, int generation) async {
+    if (_thumbBytes == null) {
+      final request = DevicePhotoService.requestThumbnail(photo);
+      _request = request;
+      final bytes = await request.bytes;
+      if (!_isCurrent(generation)) return;
+      _request = null;
       setState(() {
         _thumbBytes = bytes;
         _loading = false;
       });
     }
+    // Avoid metadata I/O for cells disposed while waiting for a thumbnail.
+    if (!_isCurrent(generation)) return;
+    _checkMotionPhoto(photo, generation);
+    _checkUltraHdr(photo, generation);
   }
 
-  Future<void> _checkMotionPhoto() async {
-    final isMotion = await DevicePhotoService.isMotionPhoto(widget.photo);
-    if (!_disposed && mounted && isMotion) {
-      setState(() {
-        _isMotionPhoto = true;
-      });
+  Future<void> _checkMotionPhoto(DevicePhotoModel photo, int generation) async {
+    final isMotion = await DevicePhotoService.isMotionPhoto(photo);
+    if (_isCurrent(generation) && isMotion != _isMotionPhoto) {
+      setState(() => _isMotionPhoto = isMotion);
     }
   }
 
-  Future<void> _checkUltraHdr() async {
-    final isHdr = await DevicePhotoService.isUltraHdr(widget.photo);
-    if (!_disposed && mounted && isHdr) {
-      setState(() {
-        _isUltraHdr = true;
-      });
+  Future<void> _checkUltraHdr(DevicePhotoModel photo, int generation) async {
+    final isHdr = await DevicePhotoService.isUltraHdr(photo);
+    if (_isCurrent(generation) && isHdr != _isUltraHdr) {
+      setState(() => _isUltraHdr = isHdr);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
     return GestureDetector(
       onTap: widget.onTap,
       onLongPress: widget.onLongPress,
@@ -117,13 +117,16 @@ class _PhotoThumbnailCardState extends State<PhotoThumbnailCard> with AutomaticK
           children: [
             // 缩略图主体 (直接首帧绘制, gapless 无缝回放，归一化 GPU 纹理显存)
             if (_thumbBytes != null)
-              Image.memory(
-                _thumbBytes!,
+              Image(
+                image: ResizeImage(
+                  MemoryImage(_thumbBytes!),
+                  width: 256,
+                  height: 256,
+                  policy: ResizeImagePolicy.fit,
+                ),
                 fit: BoxFit.cover,
                 gaplessPlayback: true,
                 filterQuality: FilterQuality.low,
-                cacheWidth: 256,
-                cacheHeight: 256,
               )
             else if (_loading)
               const ColoredBox(color: Color(0xFF1E1E26))

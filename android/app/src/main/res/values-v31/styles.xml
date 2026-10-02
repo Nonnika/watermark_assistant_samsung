@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The system splash precedes Flutter on Android 12 and later. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">@color/launch_background_color</item>
+        <item name="android:windowSplashScreenBackground">@color/launch_background_color</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_oneui</item>
+        <item name="android:statusBarColor">@color/launch_background_color</item>
+        <item name="android:navigationBarColor">@color/launch_background_color</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>

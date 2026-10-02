@@ -13,6 +13,7 @@ class FrameCanvasRenderer {
     required FrameWatermarkConfig config,
     required double totalWidth,
     required double totalHeight,
+    FilterQuality filterQuality = FilterQuality.high,
   }) {
     // 1. 绘制相框底色背景
     if (config.isBlurredBg) {
@@ -21,7 +22,7 @@ class FrameCanvasRenderer {
 
       // 高斯模糊渲染原图作为背景
       final blurPaint = Paint()
-        ..filterQuality = FilterQuality.high
+        ..filterQuality = filterQuality
         ..imageFilter = ui.ImageFilter.blur(sigmaX: 45.0, sigmaY: 45.0, tileMode: TileMode.clamp);
 
       canvas.save();
@@ -84,7 +85,7 @@ class FrameCanvasRenderer {
       );
       canvas.clipRRect(rrect);
     }
-    canvas.drawImageRect(baseImage, baseSrcRect, photoRect, Paint()..filterQuality = FilterQuality.high);
+    canvas.drawImageRect(baseImage, baseSrcRect, photoRect, Paint()..filterQuality = filterQuality);
     canvas.restore();
 
     // 3. 绘制底部参数信息栏
@@ -96,6 +97,7 @@ class FrameCanvasRenderer {
       pad: pad,
       photoH: photoH,
       bottomBarH: bottomBarH,
+      filterQuality: filterQuality,
     );
   }
 
@@ -157,6 +159,7 @@ class FrameCanvasRenderer {
     required double pad,
     required double photoH,
     required double bottomBarH,
+    FilterQuality filterQuality = FilterQuality.high,
   }) {
     final double barTop = pad + photoH;
     final double barCenterY = barTop + bottomBarH / 2;
@@ -189,7 +192,7 @@ class FrameCanvasRenderer {
 
       final logoRect = Rect.fromLTWH(pad * 1.5 + logoShiftX, barCenterY - targetLogoH / 2 + logoShiftY, targetLogoW, targetLogoH);
       final logoSrc = Rect.fromLTWH(0, 0, logoImage.width.toDouble(), logoImage.height.toDouble());
-      final logoPaint = Paint()..filterQuality = FilterQuality.high;
+      final logoPaint = Paint()..filterQuality = filterQuality;
       final isCustomLogo = config.selectedLogoId.startsWith('custom_') || config.selectedLogoId == 'custom';
       if (config.isLogoInverted && isCustomLogo) {
         logoPaint.colorFilter = const ColorFilter.matrix([

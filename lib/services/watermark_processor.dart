@@ -1,8 +1,10 @@
 import 'dart:io';
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
+
 import '../models/frame_watermark_config.dart';
 import '../models/image_item.dart';
 import '../models/watermark_config.dart';
@@ -14,35 +16,57 @@ import 'ultra_hdr_service.dart';
 
 /// 水印核心处理器：负责图片预解码、Canvas 水印合成与全分辨率文件导出
 class WatermarkProcessor {
-  static const MethodChannel _nativeChannel = MethodChannel('com.example.watermark_samsung/ultra_hdr');
+  static const MethodChannel _nativeChannel = MethodChannel(
+    'com.example.watermark_samsung/ultra_hdr',
+  );
 
   // RGB 反色滤镜矩阵 (保持 Alpha 透明度不变)
-  static const ColorFilter invertColorFilter = FloatingPngRenderer.invertColorFilter;
+  static const ColorFilter invertColorFilter =
+      FloatingPngRenderer.invertColorFilter;
 
   /// 将原始图片字节安全解码为 ui.Image (支持限制预览纹理最大边长，防止多张大图 OOM 闪退)
-  static Future<ui.Image> decodeImageFromBytes(Uint8List bytes, {int? maxDimension = 1600}) async {
+  static Future<ui.Image> decodeImageFromBytes(
+    Uint8List bytes, {
+    int? maxDimension = 1600,
+  }) async {
+    if (maxDimension != null && maxDimension <= 0) {
+      throw ArgumentError.value(
+        maxDimension,
+        'maxDimension',
+        'Must be positive',
+      );
+    }
+    final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+    ui.ImageDescriptor? descriptor;
+    ui.Codec? codec;
     try {
+      descriptor = await ui.ImageDescriptor.encoded(buffer);
+      int? targetWidth;
+      int? targetHeight;
+      // 限制长边，竖图同样受限；小照片和 Logo 保留原尺寸，避免放大纹理。
       if (maxDimension != null) {
-        final codec = await ui.instantiateImageCodec(bytes, targetWidth: maxDimension);
-        final frame = await codec.getNextFrame();
-        return frame.image;
-      } else {
-        final codec = await ui.instantiateImageCodec(bytes);
-        final frame = await codec.getNextFrame();
-        return frame.image;
+        if (descriptor.width >= descriptor.height &&
+            descriptor.width > maxDimension) {
+          targetWidth = maxDimension;
+        } else if (descriptor.height > maxDimension) {
+          targetHeight = maxDimension;
+        }
       }
-    } catch (_) {
-      final codec = await ui.instantiateImageCodec(bytes);
-      final frame = await codec.getNextFrame();
-      return frame.image;
+      codec = await descriptor.instantiateCodec(
+        targetWidth: targetWidth,
+        targetHeight: targetHeight,
+      );
+      return (await codec.getNextFrame()).image;
+    } finally {
+      codec?.dispose();
+      descriptor?.dispose();
+      buffer.dispose();
     }
   }
 
   /// 解码 1:1 无损全分辨率图片（仅在导出合成阶段使用）
   static Future<ui.Image> decodeFullResolutionImage(Uint8List bytes) async {
-    final codec = await ui.instantiateImageCodec(bytes);
-    final frame = await codec.getNextFrame();
-    return frame.image;
+    return decodeImageFromBytes(bytes, maxDimension: null);
   }
 
   /// 创建 ImageItem 并预解码尺寸与 EXIF (低内存安全模式，自动检测 Ultra HDR 与 动态照片)
@@ -53,10 +77,16 @@ class WatermarkProcessor {
     required Uint8List bytes,
   }) async {
     final exifInfo = await ExifService.extractExifAsync(bytes, path: path);
-    final previewDecoded = await decodeImageFromBytes(bytes, maxDimension: 1600);
     final isUltraHdr = await UltraHdrService.checkIsUltraHdr(bytes);
-    final motionInfo = await MotionPhotoService.extractMotionVideoAsync(bytes, path: path);
+    final motionInfo = await MotionPhotoService.extractMotionVideoAsync(
+      bytes,
+      path: path,
+    );
     final isMotion = motionInfo != null && motionInfo.videoBytes.isNotEmpty;
+    final previewDecoded = await decodeImageFromBytes(
+      bytes,
+      maxDimension: 1600,
+    );
 
     return ImageItem(
       id: id,
@@ -84,6 +114,7 @@ class WatermarkProcessor {
     required WatermarkConfig config,
     required double canvasWidth,
     required double canvasHeight,
+    FilterQuality filterQuality = FilterQuality.high,
   }) {
     FloatingPngRenderer.draw(
       canvas: canvas,
@@ -92,6 +123,7 @@ class WatermarkProcessor {
       config: config,
       canvasWidth: canvasWidth,
       canvasHeight: canvasHeight,
+      filterQuality: filterQuality,
     );
   }
 
@@ -103,6 +135,7 @@ class WatermarkProcessor {
     required FrameWatermarkConfig config,
     required double totalWidth,
     required double totalHeight,
+    FilterQuality filterQuality = FilterQuality.high,
   }) {
     FrameCanvasRenderer.draw(
       canvas: canvas,
@@ -111,6 +144,7 @@ class WatermarkProcessor {
       config: config,
       totalWidth: totalWidth,
       totalHeight: totalHeight,
+      filterQuality: filterQuality,
     );
   }
 
@@ -162,11 +196,18 @@ class WatermarkProcessor {
     }
 
     final picture = recorder.endRecording();
-    final image = await picture.toImage(targetW.toInt(), targetH.toInt());
-    picture.dispose();
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    image.dispose();
-    return byteData!.buffer.asUint8List();
+    final ui.Image image;
+    try {
+      image = await picture.toImage(targetW.toInt(), targetH.toInt());
+    } finally {
+      picture.dispose();
+    }
+    try {
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      return byteData!.buffer.asUint8List();
+    } finally {
+      image.dispose();
+    }
   }
 
   /// 1:1 无损合成并输出全分辨率文件 (支持保持 Ultra HDR Gainmap 与 动态照片，及动态播放视频水印)
@@ -223,17 +264,32 @@ class WatermarkProcessor {
       } else {
         final src = Rect.fromLTWH(0, 0, originalW, originalH);
         final dst = Rect.fromLTWH(0, 0, finalW, finalH);
-        canvas.drawImageRect(baseImage, src, dst, Paint()..filterQuality = FilterQuality.high);
+        canvas.drawImageRect(
+          baseImage,
+          src,
+          dst,
+          Paint()..filterQuality = FilterQuality.high,
+        );
       }
     }
 
     final picture = recorder.endRecording();
-    final renderedImage = await picture.toImage(finalW.toInt(), finalH.toInt());
-    picture.dispose();
+    final ui.Image renderedImage;
+    try {
+      renderedImage = await picture.toImage(finalW.toInt(), finalH.toInt());
+    } finally {
+      picture.dispose();
+    }
 
     if (outputFormat.toLowerCase() == 'png') {
-      final byteData = await renderedImage.toByteData(format: ui.ImageByteFormat.png);
-      renderedImage.dispose();
+      final ByteData? byteData;
+      try {
+        byteData = await renderedImage.toByteData(
+          format: ui.ImageByteFormat.png,
+        );
+      } finally {
+        renderedImage.dispose();
+      }
       final pngBytes = byteData!.buffer.asUint8List();
 
       if (originalBytes != null) {
@@ -245,22 +301,31 @@ class WatermarkProcessor {
       }
       return pngBytes;
     } else {
-      final byteData = await renderedImage.toByteData(format: ui.ImageByteFormat.rawRgba);
-      final rgbaBytes = byteData!.buffer.asUint8List();
       final width = renderedImage.width;
       final height = renderedImage.height;
-      renderedImage.dispose();
+      final ByteData? byteData;
+      try {
+        byteData = await renderedImage.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        );
+      } finally {
+        renderedImage.dispose();
+      }
+      final rgbaBytes = byteData!.buffer.asUint8List();
 
       Uint8List? jpgBytes;
       // 优先调用 Android 系统底层硬件加速 JPEG 编码器 (Qualcomm NEON / libjpeg-turbo 硬件加速)
       if (Platform.isAndroid) {
         try {
-          final nativeJpg = await _nativeChannel.invokeMethod<Uint8List>('compressRgbaToJpeg', {
-            'rgba': rgbaBytes,
-            'width': width,
-            'height': height,
-            'quality': quality,
-          });
+          final nativeJpg = await _nativeChannel.invokeMethod<Uint8List>(
+            'compressRgbaToJpeg',
+            {
+              'rgba': rgbaBytes,
+              'width': width,
+              'height': height,
+              'quality': quality,
+            },
+          );
           if (nativeJpg != null && nativeJpg.isNotEmpty) {
             jpgBytes = nativeJpg;
           }
@@ -305,7 +370,10 @@ class WatermarkProcessor {
         );
 
         if (preserveMotionPhoto) {
-          final motionInfo = await MotionPhotoService.extractMotionVideoAsync(originalBytes, path: originalPath);
+          final motionInfo = await MotionPhotoService.extractMotionVideoAsync(
+            originalBytes,
+            path: originalPath,
+          );
           if (motionInfo != null) {
             Uint8List videoBytesToEmbed = motionInfo.videoBytes;
 
@@ -347,7 +415,10 @@ class WatermarkProcessor {
 
       // 3. 动态照片 (Motion Photo) 重新组装与保留
       if (preserveMotionPhoto && originalBytes != null) {
-        final motionInfo = await MotionPhotoService.extractMotionVideoAsync(originalBytes, path: originalPath);
+        final motionInfo = await MotionPhotoService.extractMotionVideoAsync(
+          originalBytes,
+          path: originalPath,
+        );
         if (motionInfo != null) {
           Uint8List videoBytesToEmbed = motionInfo.videoBytes;
 

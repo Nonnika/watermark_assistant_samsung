@@ -13,6 +13,7 @@ import '../services/photo_color_extractor.dart';
 import '../services/device_photo_service.dart';
 import '../services/preset_watermarks.dart';
 import '../services/watermark_processor.dart';
+import '../theme/one_ui_theme.dart';
 import '../utils/blurred_dialog_helper.dart';
 import 'dart:typed_data';
 import 'home/editing_workspace.dart';
@@ -499,7 +500,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final inEditing = _images.isNotEmpty;
 
     return Scaffold(
-      backgroundColor: inEditing ? const Color(0xFF000000) : const Color(0xFF0C0C10),
+      backgroundColor: inEditing ? const Color(0xFF000000) : OneUITheme.landingBackground,
       body: SafeArea(
         top: inEditing,
         bottom: inEditing,

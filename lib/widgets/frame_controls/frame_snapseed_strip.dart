@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+
 import '../../services/app_strings.dart';
 
-/// 选项卡 2: 留白与照片参数 (深灰胶囊手势提示与嵌入式进度条)
+/// 留白与照片参数的手势提示。
 class FrameSnapseedStrip extends StatelessWidget {
   const FrameSnapseedStrip({super.key});
 
@@ -10,24 +11,26 @@ class FrameSnapseedStrip extends StatelessWidget {
     return Container(
       key: const ValueKey('slim_frame_snapseed_params'),
       height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E22),
-        borderRadius: BorderRadius.circular(16),
+        color: const Color(0xFF222225),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.touch_app_rounded, size: 18, color: Color(0xFFFFD600)),
-          const SizedBox(width: 8),
+          const Icon(Icons.swipe_rounded, size: 18, color: Colors.white60),
+          const SizedBox(width: 10),
           Flexible(
             child: Text(
               AppStrings.gestureHint,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w500,
+                height: 1.25,
                 color: Colors.white70,
               ),
             ),
@@ -66,11 +69,19 @@ class FrameSnapseedProgressBar extends StatelessWidget {
             children: [
               Text(
                 paramName,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: accentYellow),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: accentYellow,
+                ),
               ),
               Text(
                 paramValue,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: accentYellow),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                  color: accentYellow,
+                ),
               ),
             ],
           ),

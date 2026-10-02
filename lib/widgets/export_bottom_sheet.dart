@@ -137,7 +137,6 @@ class _ExportBottomSheetState extends State<ExportBottomSheet> {
         }
 
         if (!mounted) {
-          baseImg.dispose();
           return;
         }
         setState(() {

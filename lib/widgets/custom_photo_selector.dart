@@ -75,6 +75,11 @@ class _CustomPhotoSelectorState extends State<CustomPhotoSelector>
     }
   }
 
+  @override
+  void didHaveMemoryPressure() {
+    DevicePhotoService.clearThumbnailCache();
+  }
+
   void _onSheetFactorChanged() {
     // 仅在完全到达顶部展开位置时切换为展开态 (无中间停留档位)
     final isExp = _sheetFactorNotifier.value >= _maxFactor - 0.01;
@@ -142,8 +147,11 @@ class _CustomPhotoSelectorState extends State<CustomPhotoSelector>
       }
 
       // 预热前 24 张缩略图 (保证首屏瞬时直出)
-      if (list.isNotEmpty) {
-        DevicePhotoService.preloadThumbnails(list.take(24).toList(), batchSize: 6);
+      if (mounted && list.isNotEmpty) {
+        DevicePhotoService.preloadThumbnails(
+          list.take(24).toList(),
+          shouldContinue: () => mounted && identical(_photos, list),
+        );
       }
 
       // 后台异步并发检测动态照片

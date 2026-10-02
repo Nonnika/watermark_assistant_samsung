@@ -210,6 +210,7 @@ class _UnifiedWatermarkPreviewPainter extends CustomPainter {
         config: frameConfig,
         totalWidth: renderRect.width,
         totalHeight: renderRect.height,
+        filterQuality: FilterQuality.medium,
       );
     } else {
       if (watermarkImage != null) {
@@ -220,11 +221,12 @@ class _UnifiedWatermarkPreviewPainter extends CustomPainter {
           config: config,
           canvasWidth: renderRect.width,
           canvasHeight: renderRect.height,
+          filterQuality: FilterQuality.medium,
         );
       } else {
         final src = Rect.fromLTWH(0, 0, baseImage!.width.toDouble(), baseImage!.height.toDouble());
         final dst = Rect.fromLTWH(0, 0, renderRect.width, renderRect.height);
-        canvas.drawImageRect(baseImage!, src, dst, Paint()..filterQuality = FilterQuality.high);
+        canvas.drawImageRect(baseImage!, src, dst, Paint()..filterQuality = FilterQuality.medium);
       }
     }
 

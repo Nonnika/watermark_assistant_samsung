@@ -5,6 +5,7 @@ import android.content.ContentUris
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
@@ -182,6 +183,7 @@ class MediaStoreHelper(
                             "uri" to contentUri,
                             "size" to size,
                             "dateAdded" to effectiveDate,
+                            "dateModified" to dateMod,
                             "width" to width,
                             "height" to height,
                             "mimeType" to mimeType
@@ -219,24 +221,53 @@ class MediaStoreHelper(
     fun getPhotoThumbnail(call: MethodCall, result: MethodChannel.Result) {
         val idStr = call.argument<String>("id")
         val path = call.argument<String>("path")
-        val targetWidth = call.argument<Int>("width") ?: 256
-        val targetHeight = call.argument<Int>("height") ?: 256
+        val uriStr = call.argument<String>("uri")
+        val targetWidth = (call.argument<Int>("width") ?: 256).coerceIn(1, 2048)
+        val targetHeight = (call.argument<Int>("height") ?: 256).coerceIn(1, 2048)
 
         // 在后台专用线程池执行位图解码, 降低线程优先级, 杜绝抢占 UI/Raster 渲染核心
         thumbnailExecutor.execute {
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+            var thumbBitmap: Bitmap? = null
             try {
-                var thumbBitmap: Bitmap? = null
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && idStr != null) {
-                    val id = idStr.toLongOrNull()
-                    if (id != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val uri = if (!uriStr.isNullOrEmpty()) {
+                        Uri.parse(uriStr)
+                    } else idStr?.toLongOrNull()?.let { id ->
                         val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-                        val uri = ContentUris.withAppendedId(collection, id)
+                        ContentUris.withAppendedId(collection, id)
+                    }
+                    if (uri != null) {
                         try {
                             thumbBitmap = activity.contentResolver.loadThumbnail(uri, Size(targetWidth, targetHeight), null)
                         } catch (e: Exception) {
                             Log.w(TAG_MEDIA, "loadThumbnail failed: ${e.message}")
                         }
+                    }
+                }
+
+                // ImageDecoder applies EXIF orientation and downsamples before
+                // allocating pixels, including HEIC and very tall panoramas.
+                if (thumbBitmap == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    try {
+                        val source = when {
+                            !uriStr.isNullOrEmpty() -> ImageDecoder.createSource(activity.contentResolver, Uri.parse(uriStr))
+                            !path.isNullOrEmpty() -> ImageDecoder.createSource(File(path))
+                            else -> null
+                        }
+                        if (source != null) {
+                            thumbBitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                                val scale = minOf(1.0, targetWidth.toDouble() / info.size.width,
+                                    targetHeight.toDouble() / info.size.height)
+                                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                                decoder.setTargetSize(
+                                    (info.size.width * scale).toInt().coerceAtLeast(1),
+                                    (info.size.height * scale).toInt().coerceAtLeast(1)
+                                )
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG_MEDIA, "ImageDecoder thumbnail failed: ${e.message}")
                     }
                 }
 
@@ -251,7 +282,7 @@ class MediaStoreHelper(
                         if (options.outHeight > targetHeight || options.outWidth > targetWidth) {
                             val halfHeight = options.outHeight / 2
                             val halfWidth = options.outWidth / 2
-                            while ((halfHeight / inSampleSize) >= targetHeight && (halfWidth / inSampleSize) >= targetWidth) {
+                            while ((halfHeight / inSampleSize) >= targetHeight || (halfWidth / inSampleSize) >= targetWidth) {
                                 inSampleSize *= 2
                             }
                         }
@@ -265,9 +296,17 @@ class MediaStoreHelper(
                 }
 
                 if (thumbBitmap != null) {
+                    val bitmap = thumbBitmap!!
+                    val scale = minOf(1.0, targetWidth.toDouble() / bitmap.width,
+                        targetHeight.toDouble() / bitmap.height)
+                    if (scale < 1.0) {
+                        thumbBitmap = Bitmap.createScaledBitmap(bitmap,
+                            (bitmap.width * scale).toInt().coerceAtLeast(1),
+                            (bitmap.height * scale).toInt().coerceAtLeast(1), true)
+                        if (thumbBitmap !== bitmap) bitmap.recycle()
+                    }
                     val stream = ByteArrayOutputStream()
-                    thumbBitmap.compress(Bitmap.CompressFormat.JPEG, 75, stream)
-                    thumbBitmap.recycle()
+                    thumbBitmap!!.compress(Bitmap.CompressFormat.JPEG, 75, stream)
                     val bytes = stream.toByteArray()
                     activity.runOnUiThread { result.success(bytes) }
                 } else {
@@ -276,6 +315,8 @@ class MediaStoreHelper(
             } catch (e: Exception) {
                 Log.e(TAG_MEDIA, "getPhotoThumbnail error: ${e.message}", e)
                 activity.runOnUiThread { result.success(null) }
+            } finally {
+                thumbBitmap?.recycle()
             }
         }
     }

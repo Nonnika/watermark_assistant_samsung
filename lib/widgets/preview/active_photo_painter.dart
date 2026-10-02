@@ -8,7 +8,6 @@ import '../../services/watermark_processor.dart';
 class ActivePhotoPainter extends CustomPainter {
   final WatermarkType watermarkType;
   final ui.Image? baseImage;
-  final dynamic rawBytes;
   final ui.Image? watermarkImage;
   final WatermarkConfig config;
   final ui.Image? logoImage;
@@ -18,7 +17,6 @@ class ActivePhotoPainter extends CustomPainter {
   ActivePhotoPainter({
     required this.watermarkType,
     required this.baseImage,
-    required this.rawBytes,
     required this.watermarkImage,
     required this.config,
     required this.logoImage,
@@ -42,6 +40,7 @@ class ActivePhotoPainter extends CustomPainter {
         config: frameConfig,
         totalWidth: renderRect.width,
         totalHeight: renderRect.height,
+        filterQuality: FilterQuality.medium,
       );
     } else {
       if (watermarkImage != null) {
@@ -52,11 +51,12 @@ class ActivePhotoPainter extends CustomPainter {
           config: config,
           canvasWidth: renderRect.width,
           canvasHeight: renderRect.height,
+          filterQuality: FilterQuality.medium,
         );
       } else {
         final src = Rect.fromLTWH(0, 0, baseImage!.width.toDouble(), baseImage!.height.toDouble());
         final dst = Rect.fromLTWH(0, 0, renderRect.width, renderRect.height);
-        canvas.drawImageRect(baseImage!, src, dst, Paint()..filterQuality = FilterQuality.high);
+        canvas.drawImageRect(baseImage!, src, dst, Paint()..filterQuality = FilterQuality.medium);
       }
     }
 

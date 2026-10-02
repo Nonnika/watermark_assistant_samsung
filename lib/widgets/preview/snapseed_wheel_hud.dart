@@ -1,15 +1,17 @@
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+
 import '../../models/watermark_config.dart';
 import '../../services/app_strings.dart';
 
-/// 屏幕中央 Snapseed 风格滚轮 HUD（焦点位置固定在正中央，列表上下滚动通过焦点）
+/// 屏幕中央的参数滚轮：焦点固定，参数随上下手势经过焦点。
 class SnapseedWheelHud extends StatelessWidget {
   final WatermarkType watermarkType;
   final int activeToolIndex;
-  final String activeAxis; // Floating Pos: 'X' or 'Y'
-  final int frameParamIdx; // Frame Params: 0: 留白, 1: 参数栏高度
-  final int fxParamIdx; // Floating FX: 0: 缩放, 1: 不透明度, 2: 旋转角度
+  final String activeAxis;
+  final int frameParamIdx;
+  final int fxParamIdx;
   final bool visible;
   final double dragVisualDy;
 
@@ -26,8 +28,8 @@ class SnapseedWheelHud extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    List<String> items = [];
-    int selectedIndex = 0;
+    List<String> items;
+    int selectedIndex;
 
     if (watermarkType == WatermarkType.frame) {
       items = [
@@ -46,102 +48,145 @@ class SnapseedWheelHud extends StatelessWidget {
       items = [AppStrings.paramCustomX, AppStrings.paramCustomY];
       selectedIndex = activeAxis == 'X' ? 0 : 1;
     } else {
-      items = [AppStrings.paramScale, AppStrings.paramOpacity, AppStrings.paramRotation];
+      items = [
+        AppStrings.paramScale,
+        AppStrings.paramOpacity,
+        AppStrings.paramRotation,
+      ];
       selectedIndex = fxParamIdx;
     }
 
-    const double itemHeight = 36.0;
-    const double hudHeight = 120.0;
-    const double hudWidth = 200.0;
-    const double focusCenterTop = (hudHeight - itemHeight) / 2; // 42.0
+    const itemHeight = 40.0;
+    const hudHeight = 136.0;
+    const focusTop = (hudHeight - itemHeight) / 2;
+    const accent = Color(0xFFFFDE59);
+    final radius = BorderRadius.circular(12);
 
     return Center(
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 180),
-        opacity: visible ? 1.0 : 0.0,
-        child: IgnorePointer(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-              child: Container(
-                width: hudWidth,
-                height: hudHeight,
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.65),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.22), width: 1.0),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.4),
-                      blurRadius: 20,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
+      child: IgnorePointer(
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 180),
+          opacity: visible ? 1 : 0,
+          child: DecoratedBox(
+            // 阴影放在裁剪外，避免被磨砂卡片自身裁掉。
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.16),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
                 ),
-                clipBehavior: Clip.antiAlias,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                // 1. 固定在正中央的焦点框（位置恒定在 Y=focusCenterTop，永不位移）
-                Positioned(
-                  top: focusCenterTop,
-                  left: 10,
-                  right: 10,
-                  height: itemHeight,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFD600).withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFFFD600), width: 1.2),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: radius,
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(
+                  width: 216,
+                  height: hudHeight,
+                  decoration: BoxDecoration(
+                    borderRadius: radius,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        const Color(0xFF262629).withValues(alpha: 0.90),
+                        const Color(0xFF1D1D20).withValues(alpha: 0.92),
+                      ],
+                    ),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.09),
                     ),
                   ),
-                ),
-
-                // 2. 上下滚动的列表 (列表位移随当前选中项滚动，使得当前项刚好置于中央焦点框中)
-                AnimatedPositioned(
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeOutCubic,
-                  top: focusCenterTop - selectedIndex * itemHeight + dragVisualDy,
-                  left: 0,
-                  right: 0,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: List.generate(items.length, (idx) {
-                      final isSelected = idx == selectedIndex;
-                      return Container(
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        top: focusTop,
+                        left: 12,
+                        right: 12,
                         height: itemHeight,
-                        alignment: Alignment.center,
-                        child: AnimatedDefaultTextStyle(
-                          duration: const Duration(milliseconds: 160),
-                          style: TextStyle(
-                            fontSize: isSelected ? 15 : 12,
-                            fontWeight: isSelected ? FontWeight.w900 : FontWeight.w500,
-                            color: isSelected ? const Color(0xFFFFD600) : Colors.white38,
-                            letterSpacing: isSelected ? 0.6 : 0.2,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.06),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.08),
+                            ),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                        ),
+                      ),
+                      // 只让滚轮文字在边缘渐隐，焦点框和卡片轮廓保持清晰。
+                      Positioned.fill(
+                        child: ShaderMask(
+                          blendMode: BlendMode.dstIn,
+                          shaderCallback: (bounds) => const LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              Colors.white,
+                              Colors.white,
+                              Colors.transparent,
+                            ],
+                            stops: [0, 0.30, 0.70, 1],
+                          ).createShader(bounds),
+                          child: Stack(
                             children: [
-                              if (isSelected) ...[
-                                const Icon(Icons.arrow_right_rounded, size: 18, color: Color(0xFFFFD600)),
-                                const SizedBox(width: 2),
-                              ],
-                              Text(items[idx]),
+                              AnimatedPositioned(
+                                duration: const Duration(milliseconds: 200),
+                                curve: Curves.easeOutCubic,
+                                top:
+                                    focusTop -
+                                    selectedIndex * itemHeight +
+                                    dragVisualDy,
+                                left: 20,
+                                right: 20,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: List.generate(items.length, (idx) {
+                                    final isSelected = idx == selectedIndex;
+                                    return SizedBox(
+                                      height: itemHeight,
+                                      child: Center(
+                                        child: AnimatedDefaultTextStyle(
+                                          duration: const Duration(
+                                            milliseconds: 160,
+                                          ),
+                                          style: TextStyle(
+                                            fontSize: isSelected ? 14 : 12,
+                                            fontWeight: isSelected
+                                                ? FontWeight.w700
+                                                : FontWeight.w500,
+                                            color: isSelected
+                                                ? accent
+                                                : Colors.white60,
+                                          ),
+                                          child: Text(
+                                            items[idx],
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }),
+                                ),
+                              ),
                             ],
                           ),
                         ),
-                      );
-                    }),
+                      ),
+                    ],
                   ),
                 ),
-                ],
               ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
   }
 }

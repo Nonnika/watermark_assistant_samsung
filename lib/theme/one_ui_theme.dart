@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 /// Samsung OneUI 风格主题与视觉规范
 class OneUITheme {
+  // 启动窗口与海报首页共用底色，避免加载和页面过渡时闪白。
+  static const Color landingBackground = Color(0xFF0C0C10);
+
   // Galaxy 标志性蓝色与辅助色
   static const Color primaryBlue = Color(0xFF0381FE);
   static const Color primaryBlueDark = Color(0xFF0066D6);

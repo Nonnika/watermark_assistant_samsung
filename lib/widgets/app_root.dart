@@ -61,16 +61,21 @@ class _WatermarkAssistantAppState extends State<WatermarkAssistantApp> with Widg
           theme: OneUITheme.lightTheme(),
           darkTheme: OneUITheme.darkTheme(),
           themeMode: ThemeMode.system, // 自动跟随系统深色/浅色模式
-          home: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 350),
-            child: _showSplash
-                ? SplashScreen(
-                    key: const ValueKey('splash_screen'),
-                    onFinish: _onSplashFinish,
-                  )
-                : const HomeScreen(
-                    key: ValueKey('home_screen'),
-                  ),
+          home: ColoredBox(
+            color: OneUITheme.landingBackground,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 350),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              child: _showSplash
+                  ? SplashScreen(
+                      key: const ValueKey('splash_screen'),
+                      onFinish: _onSplashFinish,
+                    )
+                  : const HomeScreen(
+                      key: ValueKey('home_screen'),
+                    ),
+            ),
           ),
         );
       },

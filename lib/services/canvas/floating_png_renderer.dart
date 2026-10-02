@@ -21,11 +21,12 @@ class FloatingPngRenderer {
     required WatermarkConfig config,
     required double canvasWidth,
     required double canvasHeight,
+    FilterQuality filterQuality = FilterQuality.high,
   }) {
     // 1. 绘制底图
     final srcRect = Rect.fromLTWH(0, 0, baseImage.width.toDouble(), baseImage.height.toDouble());
     final dstRect = Rect.fromLTWH(0, 0, canvasWidth, canvasHeight);
-    canvas.drawImageRect(baseImage, srcRect, dstRect, Paint()..filterQuality = FilterQuality.high);
+    canvas.drawImageRect(baseImage, srcRect, dstRect, Paint()..filterQuality = filterQuality);
 
     // 2. 绘制水印图层
     drawOverlayOnly(
@@ -34,6 +35,7 @@ class FloatingPngRenderer {
       config: config,
       canvasWidth: canvasWidth,
       canvasHeight: canvasHeight,
+      filterQuality: filterQuality,
     );
   }
 
@@ -44,11 +46,12 @@ class FloatingPngRenderer {
     required WatermarkConfig config,
     required double canvasWidth,
     required double canvasHeight,
+    FilterQuality filterQuality = FilterQuality.high,
   }) {
     // 准备水印画笔 (含反色与透明度)
     final wmPaint = Paint()
       ..color = Colors.white.withValues(alpha: config.opacity)
-      ..filterQuality = FilterQuality.high;
+      ..filterQuality = filterQuality;
 
     if (config.isInverted) {
       wmPaint.colorFilter = invertColorFilter;
