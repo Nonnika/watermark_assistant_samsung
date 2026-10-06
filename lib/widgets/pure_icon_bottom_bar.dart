@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'one_ui_pressable.dart';
 import '../models/watermark_config.dart';
 import '../services/app_strings.dart';
 
@@ -47,8 +48,7 @@ class PureIconBottomBar extends StatelessWidget {
             final isSelected = activeToolIndex == idx;
             final item = toolIcons[idx];
 
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
+            return OneUIPressable(
               onTap: () => onToolSelected(idx),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -72,8 +72,7 @@ class PureIconBottomBar extends StatelessWidget {
           }),
 
           // 资源与预设
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
+          OneUIPressable(
             onTap: onOpenResources,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'one_ui_pressable.dart';
 import '../models/image_item.dart';
 import '../theme/one_ui_theme.dart';
 
@@ -33,9 +34,8 @@ class ImageStrip extends StatelessWidget {
         itemBuilder: (context, index) {
           if (index == 0) {
             // “+ 添加更多” 卡片
-            return InkWell(
+            return OneUIPressable(
               onTap: onAddMore,
-              borderRadius: BorderRadius.circular(16),
               child: Container(
                 width: 76,
                 decoration: BoxDecoration(
@@ -97,7 +97,7 @@ class ImageStrip extends StatelessWidget {
               Positioned(
                 top: -4,
                 right: -4,
-                child: GestureDetector(
+                child: OneUIPressable(
                   onTap: () => onRemove(imgIndex),
                   child: Container(
                     padding: const EdgeInsets.all(3),

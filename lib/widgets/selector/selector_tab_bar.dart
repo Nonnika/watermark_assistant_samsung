@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../one_ui_pressable.dart';
 
 /// 照片选择器顶部分段胶囊滑动 Tab 栏（「照片」与「动态照片」双 Tab）
 class SelectorTabBar extends StatelessWidget {
@@ -58,8 +59,7 @@ class SelectorTabBar extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // Tab 1: 「照片」
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
+                    OneUIPressable(
                       onTap: () => onTabChanged(0),
                       child: Container(
                         width: 104,
@@ -100,8 +100,7 @@ class SelectorTabBar extends StatelessWidget {
                     ),
 
                     // Tab 2: 「动态照片」
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
+                    OneUIPressable(
                       onTap: () => onTabChanged(1),
                       child: Container(
                         width: 122,

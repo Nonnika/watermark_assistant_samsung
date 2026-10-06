@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import '../one_ui_pressable.dart';
 
 import '../../services/app_strings.dart';
 
@@ -38,7 +39,7 @@ class PreviewTopBar extends StatelessWidget {
                 filter: _blurFilter,
                 child: Material(
                   color: Colors.transparent,
-                  child: InkWell(
+                  child: OneUIPressable(
                     onTap: onBack,
                     child: Container(
                       width: 38,
@@ -181,7 +182,7 @@ class PreviewTopBar extends StatelessWidget {
                 filter: _blurFilter,
                 child: Material(
                   color: Colors.transparent,
-                  child: InkWell(
+                  child: OneUIPressable(
                     onTap: onOpenMenu,
                     child: Container(
                       width: 38,

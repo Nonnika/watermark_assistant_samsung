@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'one_ui_pressable.dart';
 import '../models/watermark_config.dart';
 import '../theme/one_ui_theme.dart';
 
@@ -40,9 +41,8 @@ class OneUINineGrid extends StatelessWidget {
               return Expanded(
                 child: Padding(
                   padding: const EdgeInsets.all(3.0),
-                  child: InkWell(
+                  child: OneUIPressable(
                     onTap: () => onPositionSelected(pos),
-                    borderRadius: BorderRadius.circular(12),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
                       height: 44,

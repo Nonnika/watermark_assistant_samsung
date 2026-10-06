@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+
 import '../../models/frame_watermark_config.dart';
 import '../../models/image_item.dart';
 import '../../models/watermark_config.dart';
@@ -35,7 +37,8 @@ class EditingWorkspace extends StatelessWidget {
   final ValueChanged<WatermarkConfig> onPngConfigChanged;
   final ValueChanged<FrameWatermarkConfig> onFrameConfigChanged;
   final void Function(FrameWatermarkConfig newCfg) onFrameControlsChanged;
-  final void Function(String name, String valStr, double progress) onParamAdjusting;
+  final void Function(String name, String valStr, double progress)
+  onParamAdjusting;
   final VoidCallback onParamAdjustEnd;
   final void Function(bool exportAll) onExport;
   final VoidCallback onBack;
@@ -77,88 +80,93 @@ class EditingWorkspace extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: const Color(0xFF000000),
-      child: Column(
-        children: [
-          // 1. 照片全屏预览区 (纯黑背景，占满全屏)
-          Expanded(
-            child: CardStackPreview(
-              images: images,
-              currentIndex: selectedImageIndex,
-              watermarkType: watermarkType,
-              activeToolIndex: activeToolIndex,
-              watermarkImage: decodedWatermark,
-              pngConfig: activePngConfig,
-              logoImage: decodedBrandLogo,
-              frameConfig: activeFrameConfig,
-              isIndividualMode: isIndividualMode,
-              onToggleIndividualMode: onToggleIndividualMode,
-              onIndexChanged: onIndexChanged,
-              onWatermarkDragged: onWatermarkDragged,
-              onPngConfigChanged: onPngConfigChanged,
-              onFrameConfigChanged: onFrameConfigChanged,
-              onParamAdjusting: onParamAdjusting,
-              onParamAdjustEnd: onParamAdjustEnd,
-              onExport: onExport,
-              onBack: onBack,
+    // 自管 SafeArea：切换动画期间落地页保持全屏布局，编辑页内容从状态栏下方开始
+    return SafeArea(
+      child: Container(
+        color: const Color(0xFF000000),
+        child: Column(
+          children: [
+            // 1. 照片全屏预览区 (纯黑背景，占满全屏)
+            Expanded(
+              child: CardStackPreview(
+                images: images,
+                currentIndex: selectedImageIndex,
+                watermarkType: watermarkType,
+                activeToolIndex: activeToolIndex,
+                watermarkImage: decodedWatermark,
+                pngConfig: activePngConfig,
+                logoImage: decodedBrandLogo,
+                frameConfig: activeFrameConfig,
+                isIndividualMode: isIndividualMode,
+                onToggleIndividualMode: onToggleIndividualMode,
+                onIndexChanged: onIndexChanged,
+                onWatermarkDragged: onWatermarkDragged,
+                onPngConfigChanged: onPngConfigChanged,
+                onFrameConfigChanged: onFrameConfigChanged,
+                onParamAdjusting: onParamAdjusting,
+                onParamAdjustEnd: onParamAdjustEnd,
+                onExport: onExport,
+                onBack: onBack,
+              ),
             ),
-          ),
 
-          // 2. 超薄单行工具操作条 (纯黑背景，深灰胶囊，浅灰选中，平滑切换)
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 260),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeInCubic,
-            transitionBuilder: (child, animation) {
-              return FadeTransition(
-                opacity: animation,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, 0.2),
-                    end: Offset.zero,
-                  ).animate(animation),
-                  child: child,
-                ),
-              );
-            },
-            child: watermarkType == WatermarkType.frame
-                ? KeyedSubtree(
-                    key: const ValueKey('frame_controls_container'),
-                    child: FrameControls(
-                      activeToolIndex: activeToolIndex,
-                      config: activeFrameConfig,
-                      photoColors: photoPalette,
-                      photoBytes: images.isNotEmpty && selectedImageIndex < images.length
-                          ? images[selectedImageIndex].bytes
-                          : null,
-                      isAdjusting: isAdjusting,
-                      adjustingParamName: adjustingParamName,
-                      adjustingParamValue: adjustingParamValue,
-                      adjustingProgress: adjustingProgress,
-                      onChanged: onFrameControlsChanged,
-                    ),
-                  )
-                : KeyedSubtree(
-                    key: const ValueKey('floating_controls_container'),
-                    child: FloatingControls(
-                      activeToolIndex: activeToolIndex,
-                      config: activePngConfig,
-                      watermarkBytes: watermarkBytes,
-                      decodedWatermark: decodedWatermark,
-                      watermarkName: watermarkName,
-                      presetWatermarkId: presetWatermarkId,
-                      isAdjusting: isAdjusting,
-                      adjustingParamName: adjustingParamName,
-                      adjustingParamValue: adjustingParamValue,
-                      adjustingProgress: adjustingProgress,
-                      onPickCustomWatermark: onPickCustomWatermark,
-                      onPickPresetWatermark: onPickPresetWatermark,
-                      onChanged: (newCfg) => onPngConfigChanged(newCfg),
-                    ),
+            // 2. 超薄单行工具操作条 (纯黑背景，深灰胶囊，浅灰选中，平滑切换)
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 260),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0, 0.2),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
                   ),
-          ),
-        ],
+                );
+              },
+              child: watermarkType == WatermarkType.frame
+                  ? KeyedSubtree(
+                      key: const ValueKey('frame_controls_container'),
+                      child: FrameControls(
+                        activeToolIndex: activeToolIndex,
+                        config: activeFrameConfig,
+                        photoColors: photoPalette,
+                        photoBytes:
+                            images.isNotEmpty &&
+                                selectedImageIndex < images.length
+                            ? images[selectedImageIndex].bytes
+                            : null,
+                        isAdjusting: isAdjusting,
+                        adjustingParamName: adjustingParamName,
+                        adjustingParamValue: adjustingParamValue,
+                        adjustingProgress: adjustingProgress,
+                        onChanged: onFrameControlsChanged,
+                      ),
+                    )
+                  : KeyedSubtree(
+                      key: const ValueKey('floating_controls_container'),
+                      child: FloatingControls(
+                        activeToolIndex: activeToolIndex,
+                        config: activePngConfig,
+                        watermarkBytes: watermarkBytes,
+                        decodedWatermark: decodedWatermark,
+                        watermarkName: watermarkName,
+                        presetWatermarkId: presetWatermarkId,
+                        isAdjusting: isAdjusting,
+                        adjustingParamName: adjustingParamName,
+                        adjustingParamValue: adjustingParamValue,
+                        adjustingProgress: adjustingProgress,
+                        onPickCustomWatermark: onPickCustomWatermark,
+                        onPickPresetWatermark: onPickPresetWatermark,
+                        onChanged: (newCfg) => onPngConfigChanged(newCfg),
+                      ),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

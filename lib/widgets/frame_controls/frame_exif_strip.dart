@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../one_ui_pressable.dart';
 import 'package:flutter/services.dart';
 import '../../models/frame_watermark_config.dart';
 import '../../services/app_strings.dart';
@@ -92,12 +93,11 @@ class FrameExifStrip extends StatelessWidget {
                     // 智能输入提示与快捷填入胶囊
                     Row(
                       children: [
-                        InkWell(
+                        OneUIPressable(
                           onTap: () {
                             dateController.text = DateTimeAutoSegmentFormatter.nowFormatted();
                             setDialogState(() {});
                           },
-                          borderRadius: BorderRadius.circular(8),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
@@ -240,9 +240,8 @@ class FrameExifStrip extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        InkWell(
+        OneUIPressable(
           onTap: () => _showEditExifDialog(context),
-          borderRadius: BorderRadius.circular(12),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
             decoration: BoxDecoration(
@@ -263,9 +262,8 @@ class FrameExifStrip extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 6),
-        InkWell(
+        OneUIPressable(
           onTap: () => onChanged(config.copyWith(showParameters: !config.showParameters)),
-          borderRadius: BorderRadius.circular(12),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 140),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),

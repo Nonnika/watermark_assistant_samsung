@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'one_ui_pressable.dart';
 import 'package:flutter/services.dart';
 import '../models/watermark_config.dart';
 import '../services/device_photo_service.dart';
@@ -391,8 +392,7 @@ class _CustomPhotoSelectorState extends State<CustomPhotoSelector>
                                       ),
                                     ),
                                     const Spacer(),
-                                    GestureDetector(
-                                      behavior: HitTestBehavior.opaque,
+                                    OneUIPressable(
                                       onTap: () {
                                         HapticFeedback.selectionClick();
                                         setState(() => _selectedIds.clear());

@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'one_ui_pressable.dart';
 import '../models/frame_watermark_config.dart';
 import '../models/image_item.dart';
 import '../models/watermark_config.dart';
@@ -320,7 +321,7 @@ class _ExportBottomSheetState extends State<ExportBottomSheet> {
                   ),
                   if (_preserveMotion) ...[
                   const SizedBox(height: 10),
-                  GestureDetector(
+                  OneUIPressable(
                     onTap: () => setState(() => _watermarkMotionVideo = !_watermarkMotionVideo),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
@@ -550,7 +551,7 @@ class _ExportBottomSheetState extends State<ExportBottomSheet> {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
+    return OneUIPressable(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),

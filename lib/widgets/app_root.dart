@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../services/app_strings.dart';
 import '../theme/one_ui_theme.dart';
 import 'home_screen.dart';
@@ -14,7 +15,8 @@ class WatermarkAssistantApp extends StatefulWidget {
   State<WatermarkAssistantApp> createState() => _WatermarkAssistantAppState();
 }
 
-class _WatermarkAssistantAppState extends State<WatermarkAssistantApp> with WidgetsBindingObserver {
+class _WatermarkAssistantAppState extends State<WatermarkAssistantApp>
+    with WidgetsBindingObserver {
   late bool _showSplash;
 
   @override
@@ -67,14 +69,24 @@ class _WatermarkAssistantAppState extends State<WatermarkAssistantApp> with Widg
               duration: const Duration(milliseconds: 350),
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: Tween<double>(
+                      begin: 1.02,
+                      end: 1.0,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                );
+              },
               child: _showSplash
                   ? SplashScreen(
                       key: const ValueKey('splash_screen'),
                       onFinish: _onSplashFinish,
                     )
-                  : const HomeScreen(
-                      key: ValueKey('home_screen'),
-                    ),
+                  : const HomeScreen(key: ValueKey('home_screen')),
             ),
           ),
         );

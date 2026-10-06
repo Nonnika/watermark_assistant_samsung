@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import '../one_ui_pressable.dart';
 import '../../models/frame_watermark_config.dart';
 import 'color_grid_picker.dart';
 
@@ -38,7 +39,7 @@ class FrameColorStrip extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
         // 1. 最左侧彩色圆圈 (纯净渐变色彩虹色轮，点击弹出方格化色板)
-        InkWell(
+        OneUIPressable(
           onTap: () => ColorGridPicker.show(
             context,
             config: config,
@@ -46,7 +47,6 @@ class FrameColorStrip extends StatelessWidget {
             photoBytes: photoBytes,
             onChanged: onChanged,
           ),
-          borderRadius: BorderRadius.circular(20),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),
             width: 36,
@@ -95,9 +95,8 @@ class FrameColorStrip extends StatelessWidget {
         ),
 
         // 2. 由图片模糊而成的小球 (压暗高斯模糊边框)
-        InkWell(
+        OneUIPressable(
           onTap: () => onChanged(config.copyWith(isBlurredBg: true, isPaperTextureBg: false)),
-          borderRadius: BorderRadius.circular(20),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),
             width: 36,
@@ -165,9 +164,8 @@ class FrameColorStrip extends StatelessWidget {
         ),
 
         // 3. 米黄色纸张纹理效果小球
-        InkWell(
+        OneUIPressable(
           onTap: () => onChanged(config.copyWith(isPaperTextureBg: true, isBlurredBg: false)),
-          borderRadius: BorderRadius.circular(20),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),
             width: 36,
@@ -208,9 +206,8 @@ class FrameColorStrip extends StatelessWidget {
         ...quickPresets.map((color) {
           final isSelected = !config.isBlurredBg && !config.isPaperTextureBg && config.backgroundColor == color;
 
-          return InkWell(
+          return OneUIPressable(
             onTap: () => onChanged(config.copyWith(isBlurredBg: false, isPaperTextureBg: false, backgroundColor: color)),
-            borderRadius: BorderRadius.circular(20),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 160),
               width: 36,

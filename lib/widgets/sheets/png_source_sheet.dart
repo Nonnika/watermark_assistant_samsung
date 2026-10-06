@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../one_ui_pressable.dart';
 import '../../theme/one_ui_theme.dart';
 import '../../utils/blurred_dialog_helper.dart';
 
@@ -57,7 +58,7 @@ class PngSourceSheet {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        InkWell(
+                        OneUIPressable(
                           onTap: () {
                             Navigator.pop(context);
                             onPickFromGallery();
@@ -90,7 +91,7 @@ class PngSourceSheet {
                             ),
                           ),
                         ),
-                        InkWell(
+                        OneUIPressable(
                           onTap: () {
                             Navigator.pop(context);
                             onPickFromFile();

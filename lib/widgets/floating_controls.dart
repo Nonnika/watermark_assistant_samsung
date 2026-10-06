@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'one_ui_pressable.dart';
 import '../models/watermark_config.dart';
 
 class FloatingControls extends StatelessWidget {
@@ -160,9 +161,8 @@ class FloatingControls extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        InkWell(
+        OneUIPressable(
           onTap: onPickPresetWatermark,
-          borderRadius: BorderRadius.circular(13),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
@@ -180,9 +180,8 @@ class FloatingControls extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        InkWell(
+        OneUIPressable(
           onTap: onPickCustomWatermark,
-          borderRadius: BorderRadius.circular(13),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
@@ -225,7 +224,7 @@ class FloatingControls extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        InkWell(
+        OneUIPressable(
           onTap: () {
             onChanged(
               config.copyWith(
@@ -236,7 +235,6 @@ class FloatingControls extends StatelessWidget {
               ),
             );
           },
-          borderRadius: BorderRadius.circular(13),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
@@ -276,9 +274,8 @@ class FloatingControls extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        InkWell(
+        OneUIPressable(
           onTap: () => onChanged(config.copyWith(isInverted: !config.isInverted)),
-          borderRadius: BorderRadius.circular(13),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 140),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

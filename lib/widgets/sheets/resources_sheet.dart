@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import '../one_ui_pressable.dart';
 import '../../models/saved_preset.dart';
 import '../../models/watermark_config.dart';
 import '../../theme/one_ui_theme.dart';
@@ -73,7 +74,7 @@ class ResourcesSheet {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         // 1. 继续添加照片
-                        InkWell(
+                        OneUIPressable(
                           onTap: () {
                             Navigator.pop(context);
                             onPickMoreImages();
@@ -121,7 +122,7 @@ class ResourcesSheet {
                         ),
 
                         // 2. 我的预设库
-                        InkWell(
+                        OneUIPressable(
                           onTap: () {
                             Navigator.pop(context);
                             PresetManageDialog.showPresetListSheet(
@@ -172,7 +173,7 @@ class ResourcesSheet {
                         ),
 
                         // 3. 保存当前配置为预设
-                        InkWell(
+                        OneUIPressable(
                           onTap: () {
                             Navigator.pop(context);
                             PresetManageDialog.showSavePresetDialog(

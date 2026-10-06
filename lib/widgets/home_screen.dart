@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -15,7 +16,9 @@ import '../services/preset_watermarks.dart';
 import '../services/watermark_processor.dart';
 import '../theme/one_ui_theme.dart';
 import '../utils/blurred_dialog_helper.dart';
+
 import 'dart:typed_data';
+
 import 'home/editing_workspace.dart';
 import 'home/landing_pick_screen.dart';
 import 'export_bottom_sheet.dart';
@@ -32,7 +35,8 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
   final List<ImageItem> _images = [];
   int _selectedImageIndex = 0;
 
@@ -42,6 +46,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   // 是否开启“单独调节当前照片”开关 (true: 仅当前图片生效, false: 批量同步全局)
   bool _isIndividualMode = false;
+
+  // 落地页 ↔ 编辑页切换方向：true = 进入编辑（放大推入），false = 返回落地页（缩小退场）
+  bool _enteringEditing = true;
 
   // Snapseed 底部面板参数实时反馈状态
   bool _isAdjusting = false;
@@ -93,7 +100,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   WatermarkConfig get _activePngConfig {
     if (_isIndividualMode && _images.isNotEmpty) {
-      return _images[_selectedImageIndex].individualPngConfig ?? _globalPngConfig;
+      return _images[_selectedImageIndex].individualPngConfig ??
+          _globalPngConfig;
     }
     return _globalPngConfig;
   }
@@ -112,7 +120,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   FrameWatermarkConfig get _activeFrameConfig {
     if (_images.isNotEmpty && _selectedImageIndex < _images.length) {
-      return (_isIndividualMode ? (_images[_selectedImageIndex].individualFrameConfig ?? _globalFrameConfig) : _globalFrameConfig)
+      return (_isIndividualMode
+              ? (_images[_selectedImageIndex].individualFrameConfig ??
+                    _globalFrameConfig)
+              : _globalFrameConfig)
           .copyWith(exifInfo: _images[_selectedImageIndex].exifInfo);
     }
     return _globalFrameConfig;
@@ -180,7 +191,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       return;
     }
     final requestId = ++_paletteRequestId;
-    final palette = await PhotoColorExtractor.extractPaletteFromBytesAsync(bytes);
+    final palette = await PhotoColorExtractor.extractPaletteFromBytesAsync(
+      bytes,
+    );
     // 丢弃过期结果：等待期间用户可能已切换照片
     if (!mounted || requestId != _paletteRequestId) return;
     setState(() => _photoPalette = palette);
@@ -196,6 +209,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         _isLoading = true;
         _watermarkType = type;
         _activeToolIndex = 0;
+        _enteringEditing = true;
       });
       _images.clear();
       for (final photo in photoList) {
@@ -203,7 +217,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         if (bytes != null && bytes.isNotEmpty) {
           final item = await WatermarkProcessor.createImageItem(
             id: photo.id.isNotEmpty ? photo.id : UniqueKey().toString(),
-            name: photo.name.isNotEmpty ? photo.name : 'Photo_${DateTime.now().millisecondsSinceEpoch}',
+            name: photo.name.isNotEmpty
+                ? photo.name
+                : 'Photo_${DateTime.now().millisecondsSinceEpoch}',
             path: photo.path,
             bytes: bytes,
           );
@@ -222,9 +238,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导入图片失败: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('导入图片失败: $e')));
       }
     }
   }
@@ -233,15 +248,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     await _onImportWithWatermarkType([photo], WatermarkType.frame);
   }
 
-  Future<void> _onSelectMultipleDevicePhotos(List<DevicePhotoModel> photoList) async {
+  Future<void> _onSelectMultipleDevicePhotos(
+    List<DevicePhotoModel> photoList,
+  ) async {
     await _onImportWithWatermarkType(photoList, WatermarkType.frame);
   }
 
   void _showQuickOptionsMenu() {
-    QuickOptionsSheet.show(
-      context: context,
-      onApplyPreset: _applySavedPreset,
-    );
+    QuickOptionsSheet.show(context: context, onApplyPreset: _applySavedPreset);
   }
 
   Future<void> _pickImagesFromGallery() async {
@@ -270,15 +284,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         _isLoading = false;
         _selectedImageIndex = newIdx;
         _watermarkType = WatermarkType.frame;
+        _enteringEditing = true;
       });
       _refreshPhotoPalette();
       _refreshBrandLogo();
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('选择图片失败: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('选择图片失败: $e')));
       }
     }
   }
@@ -307,9 +321,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('从相册导入水印失败: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('从相册导入水印失败: $e')));
       }
     }
   }
@@ -342,9 +355,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('从文件管理器导入水印失败: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('从文件管理器导入水印失败: $e')));
       }
     }
   }
@@ -384,7 +396,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         customX: preset.customX,
         customY: preset.customY,
         isInverted: preset.isInverted,
-        mode: preset.mode == 'tiled' ? WatermarkMode.tiled : WatermarkMode.single,
+        mode: preset.mode == 'tiled'
+            ? WatermarkMode.tiled
+            : WatermarkMode.single,
         tileSpacingX: preset.tileSpacingX,
         tileSpacingY: preset.tileSpacingY,
         tileStaggered: preset.tileStaggered,
@@ -447,7 +461,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         final item = _images[_selectedImageIndex];
         _images[_selectedImageIndex] = item.copyWith(
           individualPngConfig: item.individualPngConfig ?? _globalPngConfig,
-          individualFrameConfig: item.individualFrameConfig ??
+          individualFrameConfig:
+              item.individualFrameConfig ??
               _globalFrameConfig.copyWith(exifInfo: item.exifInfo),
         );
       }
@@ -488,6 +503,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   void _onEditingBack() {
     setState(() {
+      _enteringEditing = false;
       _images.clear();
       _selectedImageIndex = 0;
     });
@@ -499,90 +515,117 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     final inEditing = _images.isNotEmpty;
 
-    return Scaffold(
-      backgroundColor: inEditing ? const Color(0xFF000000) : OneUITheme.landingBackground,
-      body: SafeArea(
-        top: inEditing,
-        bottom: inEditing,
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 380),
-          switchInCurve: Curves.easeOutCubic,
-          switchOutCurve: Curves.easeInCubic,
-          transitionBuilder: (child, animation) {
-            return FadeTransition(
-              opacity: animation,
-              child: ScaleTransition(
-                scale: Tween<double>(begin: 0.96, end: 1.0).animate(
-                  CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-                ),
-                child: child,
-              ),
-            );
-          },
-          child: _images.isEmpty
-              ? KeyedSubtree(
-                  key: const ValueKey('landing_pick_screen'),
-                  child: LandingPickScreen(
-                    isLoading: _isLoading,
-                    onPickPresetWatermark: _showPresetWatermarkPicker,
-                    onOpenQuickOptions: _showQuickOptionsMenu,
-                    onImportWithWatermarkType: _onImportWithWatermarkType,
-                    onPhotoSelected: _onSelectDevicePhoto,
-                    onMultiplePhotosSelected: _onSelectMultipleDevicePhotos,
-                  ),
-                )
-              : KeyedSubtree(
-                  key: const ValueKey('editing_workspace_screen'),
-                  child: EditingWorkspace(
-                    images: _images,
-                    selectedImageIndex: _selectedImageIndex,
-                    watermarkType: _watermarkType,
-                    activeToolIndex: _activeToolIndex,
-                    decodedWatermark: _decodedWatermark,
-                    activePngConfig: _activePngConfig,
-                    decodedBrandLogo: _brandLogoForConfig(_activeFrameConfig),
-                    activeFrameConfig: _activeFrameConfig,
-                    isIndividualMode: _isIndividualMode,
-                    isAdjusting: _isAdjusting,
-                    adjustingParamName: _adjustingParamName,
-                    adjustingParamValue: _adjustingParamValue,
-                    adjustingProgress: _adjustingProgress,
-                    watermarkBytes: _watermarkBytes,
-                    watermarkName: _watermarkName,
-                    presetWatermarkId: _presetWatermarkId,
-                    photoPalette: _photoPalette,
-                    onToggleIndividualMode: _onToggleIndividualMode,
-                    onIndexChanged: _onPreviewIndexChanged,
-                    onWatermarkDragged: _onWatermarkDragged,
-                    onPngConfigChanged: _updatePngConfig,
-                    onFrameConfigChanged: _updateFrameConfig,
-                    onFrameControlsChanged: _updateFrameConfig,
-                    onParamAdjusting: _onParamAdjusting,
-                    onParamAdjustEnd: _onParamAdjustEnd,
-                    onExport: (exportAll) => _openExportSheet(exportAll: exportAll),
-                    onBack: _onEditingBack,
-                    onPickCustomWatermark: _pickCustomPngWatermarkDialog,
-                    onPickPresetWatermark: _showPresetWatermarkPicker,
-                  ),
-                ),
-        ),
-      ),
-      bottomNavigationBar: AnimatedSize(
+    // 编辑页中拦截系统返回（含预测性返回手势）：先动画回到落地页，落地页才允许退出应用
+    return PopScope(
+      canPop: !inEditing,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _onEditingBack();
+      },
+      child: AnimatedContainer(
         duration: const Duration(milliseconds: 320),
         curve: Curves.easeOutCubic,
-        child: _images.isNotEmpty
-            ? PureIconBottomBar(
-                watermarkType: _watermarkType,
-                activeToolIndex: _activeToolIndex,
-                onToolSelected: (toolIdx) {
-                  setState(() {
-                    _activeToolIndex = toolIdx;
-                    _isAdjusting = false;
-                  });
-                },
-                onOpenResources: _showResourcesSheet,
-              )
-            : const SizedBox.shrink(),
+        color: inEditing
+            ? const Color(0xFF000000)
+            : OneUITheme.landingBackground,
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          body: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 360),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: _buildScreenSwitchTransition,
+            child: _images.isEmpty
+                ? KeyedSubtree(
+                    key: const ValueKey('landing_pick_screen'),
+                    child: LandingPickScreen(
+                      isLoading: _isLoading,
+                      onPickPresetWatermark: _showPresetWatermarkPicker,
+                      onOpenQuickOptions: _showQuickOptionsMenu,
+                      onImportWithWatermarkType: _onImportWithWatermarkType,
+                      onPhotoSelected: _onSelectDevicePhoto,
+                      onMultiplePhotosSelected: _onSelectMultipleDevicePhotos,
+                    ),
+                  )
+                : KeyedSubtree(
+                    key: const ValueKey('editing_workspace_screen'),
+                    child: EditingWorkspace(
+                      images: _images,
+                      selectedImageIndex: _selectedImageIndex,
+                      watermarkType: _watermarkType,
+                      activeToolIndex: _activeToolIndex,
+                      decodedWatermark: _decodedWatermark,
+                      activePngConfig: _activePngConfig,
+                      decodedBrandLogo: _brandLogoForConfig(_activeFrameConfig),
+                      activeFrameConfig: _activeFrameConfig,
+                      isIndividualMode: _isIndividualMode,
+                      isAdjusting: _isAdjusting,
+                      adjustingParamName: _adjustingParamName,
+                      adjustingParamValue: _adjustingParamValue,
+                      adjustingProgress: _adjustingProgress,
+                      watermarkBytes: _watermarkBytes,
+                      watermarkName: _watermarkName,
+                      presetWatermarkId: _presetWatermarkId,
+                      photoPalette: _photoPalette,
+                      onToggleIndividualMode: _onToggleIndividualMode,
+                      onIndexChanged: _onPreviewIndexChanged,
+                      onWatermarkDragged: _onWatermarkDragged,
+                      onPngConfigChanged: _updatePngConfig,
+                      onFrameConfigChanged: _updateFrameConfig,
+                      onFrameControlsChanged: _updateFrameConfig,
+                      onParamAdjusting: _onParamAdjusting,
+                      onParamAdjustEnd: _onParamAdjustEnd,
+                      onExport: (exportAll) =>
+                          _openExportSheet(exportAll: exportAll),
+                      onBack: _onEditingBack,
+                      onPickCustomWatermark: _pickCustomPngWatermarkDialog,
+                      onPickPresetWatermark: _showPresetWatermarkPicker,
+                    ),
+                  ),
+          ),
+          bottomNavigationBar: AnimatedSize(
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeOutCubic,
+            child: _images.isNotEmpty
+                ? PureIconBottomBar(
+                    watermarkType: _watermarkType,
+                    activeToolIndex: _activeToolIndex,
+                    onToolSelected: (toolIdx) {
+                      setState(() {
+                        _activeToolIndex = toolIdx;
+                        _isAdjusting = false;
+                      });
+                    },
+                    onOpenResources: _showResourcesSheet,
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 方向感知的屏幕切换转场：
+  /// - 进入编辑：编辑屏自 0.96 放大淡入，落地页作为底层仅渐隐；
+  /// - 返回落地页：编辑屏缩至 0.94 淡出、落地页在下层渐显，
+  ///   与 Android 预测性返回「上层屏缩小退场、下层屏保持」的视觉语义一致。
+  Widget _buildScreenSwitchTransition(
+    Widget child,
+    Animation<double> animation,
+  ) {
+    final isEditingChild =
+        child.key == const ValueKey('editing_workspace_screen');
+    if (!isEditingChild) {
+      return FadeTransition(opacity: animation, child: child);
+    }
+    return FadeTransition(
+      opacity: animation,
+      child: ScaleTransition(
+        scale:
+            (_enteringEditing
+                    ? Tween<double>(begin: 0.96, end: 1.0)
+                    : Tween<double>(begin: 0.94, end: 1.0))
+                .animate(animation),
+        child: child,
       ),
     );
   }

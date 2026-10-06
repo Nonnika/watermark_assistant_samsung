@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../one_ui_pressable.dart';
 import 'package:flutter/services.dart';
 import '../../models/watermark_config.dart';
 import '../../services/device_photo_service.dart';
@@ -86,12 +87,11 @@ class _TopAboutButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
-      child: InkWell(
+      child: OneUIPressable(
         onTap: () {
           HapticFeedback.selectionClick();
           AboutPage.open(context);
         },
-        borderRadius: BorderRadius.circular(20),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(

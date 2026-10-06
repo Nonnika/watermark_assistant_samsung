@@ -69,7 +69,9 @@ void main() {
     final backBtn = find.byTooltip('返回');
     expect(backBtn, findsOneWidget);
     await tester.tap(backBtn);
-    for (int i = 0; i < 10; i++) {
+    // PredictiveBackPageTransitionsBuilder 的退场动画比旧版 260ms 自定义转场更长，
+    // 需要泵足 1s 才能完全移除路由（落地页有无限循环动画，不能用 pumpAndSettle）
+    for (int i = 0; i < 20; i++) {
       await tester.pump(const Duration(milliseconds: 50));
     }
 

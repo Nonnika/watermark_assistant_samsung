@@ -10,7 +10,8 @@
         android:icon="@mipmap/ic_launcher_oneui"
         android:roundIcon="@mipmap/ic_launcher_oneui"
         android:largeHeap="true"
-        android:requestLegacyExternalStorage="true">
+        android:requestLegacyExternalStorage="true"
+        android:enableOnBackInvokedCallback="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

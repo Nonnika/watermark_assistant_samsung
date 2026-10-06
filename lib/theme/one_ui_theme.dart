@@ -32,17 +32,19 @@ class OneUITheme {
   static const double smallRadius = 14.0;
 
   static BorderRadius get cardBorderRadius => BorderRadius.circular(cardRadius);
-  static BorderRadius get pillBorderRadius => BorderRadius.circular(buttonRadius);
-  static BorderRadius get smallBorderRadius => BorderRadius.circular(smallRadius);
+  static BorderRadius get pillBorderRadius =>
+      BorderRadius.circular(buttonRadius);
+  static BorderRadius get smallBorderRadius =>
+      BorderRadius.circular(smallRadius);
 
   // OneUI 阴影
   static List<BoxShadow> get softShadow => [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.04),
-          blurRadius: 16,
-          offset: const Offset(0, 4),
-        ),
-      ];
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.04),
+      blurRadius: 16,
+      offset: const Offset(0, 4),
+    ),
+  ];
 
   static ThemeData lightTheme() {
     return ThemeData(
@@ -103,7 +105,12 @@ class OneUITheme {
       ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: ZoomPageTransitionsBuilder(),
+          // Android：参与系统预测性返回手势。非手势路径（按钮 push/pop 及下层页联动）
+          // 回退为 FadeForwards 转场，其垫底色默认取 colorScheme.surface（浅色主题下是
+          // 纯白），暗色页面切换会闪白——必须显式指定贴近应用画布的 fallbackColor。
+          TargetPlatform.android: PredictiveBackPageTransitionsBuilder(
+            fallbackColor: landingBackground,
+          ),
           TargetPlatform.iOS: ZoomPageTransitionsBuilder(),
           TargetPlatform.macOS: ZoomPageTransitionsBuilder(),
         },
@@ -170,7 +177,12 @@ class OneUITheme {
       ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: ZoomPageTransitionsBuilder(),
+          // Android：参与系统预测性返回手势。非手势路径（按钮 push/pop 及下层页联动）
+          // 回退为 FadeForwards 转场，其垫底色默认取 colorScheme.surface（浅色主题下是
+          // 纯白），暗色页面切换会闪白——必须显式指定贴近应用画布的 fallbackColor。
+          TargetPlatform.android: PredictiveBackPageTransitionsBuilder(
+            fallbackColor: landingBackground,
+          ),
           TargetPlatform.iOS: ZoomPageTransitionsBuilder(),
           TargetPlatform.macOS: ZoomPageTransitionsBuilder(),
         },

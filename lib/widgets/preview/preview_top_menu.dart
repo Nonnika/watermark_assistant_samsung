@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import '../one_ui_pressable.dart';
 import 'package:flutter/services.dart';
 import '../../services/app_strings.dart';
 
@@ -42,12 +43,11 @@ class PreviewTopMenu {
                           : const Color(0xFF2C2C2E),
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
                     ),
-                    child: InkWell(
+                    child: OneUIPressable(
                       onTap: () {
                         Navigator.pop(ctx);
                         onToggleIndividualMode(!isIndividualMode);
                       },
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         child: Row(
@@ -88,12 +88,11 @@ class PreviewTopMenu {
                       color: Color(0xFF2C2C2E),
                       borderRadius: BorderRadius.zero,
                     ),
-                    child: InkWell(
+                    child: OneUIPressable(
                       onTap: () {
                         Navigator.pop(ctx);
                         onExport(false);
                       },
-                      borderRadius: BorderRadius.zero,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         child: Row(
@@ -128,12 +127,11 @@ class PreviewTopMenu {
                       color: Color(0xFF2C2C2E),
                       borderRadius: BorderRadius.vertical(bottom: Radius.circular(15)),
                     ),
-                    child: InkWell(
+                    child: OneUIPressable(
                       onTap: () {
                         Navigator.pop(ctx);
                         onExport(true);
                       },
-                      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(15)),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         child: Row(

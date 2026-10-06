@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import '../one_ui_pressable.dart';
 
 import '../../models/watermark_config.dart';
 
@@ -108,7 +109,7 @@ class SelectorBottomAction extends StatelessWidget {
         filter: _buttonBlur,
         child: Material(
           color: Colors.white.withValues(alpha: 0.38),
-          child: InkWell(
+          child: OneUIPressable(
             onTap: onTap,
             splashColor: Colors.black12,
             highlightColor: Colors.black.withValues(alpha: 0.06),

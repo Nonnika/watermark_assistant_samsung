@@ -1,6 +1,9 @@
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'one_ui_pressable.dart';
 import 'package:flutter/services.dart';
+
 import '../services/app_strings.dart';
 import '../utils/blurred_dialog_helper.dart';
 
@@ -10,29 +13,10 @@ class AboutPage extends StatelessWidget {
 
   static Future<void> open(BuildContext context) {
     HapticFeedback.selectionClick();
-    return Navigator.of(context).push(
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => const AboutPage(),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          final curved = CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeOutCubic,
-            reverseCurve: Curves.easeInCubic,
-          );
-          return FadeTransition(
-            opacity: curved,
-            child: SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0.06, 0),
-                end: Offset.zero,
-              ).animate(curved),
-              child: child,
-            ),
-          );
-        },
-        transitionDuration: const Duration(milliseconds: 260),
-      ),
-    );
+    // 走主题转场（Android 端为 PredictiveBackPageTransitionsBuilder），
+    // 使 About 页能跟随系统预测性返回手势缩放退场
+    return Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (context) => const AboutPage()));
   }
 
   @override
@@ -124,7 +108,12 @@ class AboutPage extends StatelessWidget {
 
               // 3. 底部胶囊按钮组 (条款与条件 + 开源许可证)
               Padding(
-                padding: EdgeInsets.fromLTRB(48, 0, 48, bottomPadding > 0 ? bottomPadding + 16 : 36),
+                padding: EdgeInsets.fromLTRB(
+                  48,
+                  0,
+                  48,
+                  bottomPadding > 0 ? bottomPadding + 16 : 36,
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -148,6 +137,15 @@ class AboutPage extends StatelessWidget {
                         );
                       },
                     ),
+                    // 4. AlphaZero 品牌 logo（浅色版，黑底下弱化显示）
+                    const SizedBox(height: 36),
+                    Image.asset(
+                      'assets/logo/Alpha-light.png',
+                      width: 168,
+                      opacity: const AlwaysStoppedAnimation<double>(0.88),
+                      excludeFromSemantics: true,
+                      filterQuality: FilterQuality.medium,
+                    ),
                   ],
                 ),
               ),
@@ -168,9 +166,8 @@ class AboutPage extends StatelessWidget {
       child: Material(
         color: const Color(0xFF222228), // One UI 纯黑暗色模式胶囊背景
         borderRadius: BorderRadius.circular(26),
-        child: InkWell(
+        child: OneUIPressable(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(26),
           splashColor: Colors.white.withValues(alpha: 0.1),
           highlightColor: Colors.white.withValues(alpha: 0.06),
           child: Center(
@@ -251,9 +248,8 @@ class AboutPage extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         Expanded(
-                          child: InkWell(
+                          child: OneUIPressable(
                             onTap: () => Navigator.pop(ctx),
-                            borderRadius: BorderRadius.circular(20),
                             child: Container(
                               height: 48,
                               alignment: Alignment.center,
@@ -338,9 +334,8 @@ class AboutPage extends StatelessWidget {
                     child: Row(
                       children: [
                         Expanded(
-                          child: InkWell(
+                          child: OneUIPressable(
                             onTap: () => Navigator.pop(ctx),
-                            borderRadius: BorderRadius.circular(20),
                             child: Container(
                               height: 48,
                               alignment: Alignment.center,

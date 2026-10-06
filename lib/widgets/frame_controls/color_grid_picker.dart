@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import '../one_ui_pressable.dart';
 import '../../models/frame_watermark_config.dart';
 import '../../services/app_strings.dart';
 import '../../utils/blurred_dialog_helper.dart';
@@ -336,7 +337,7 @@ class ColorGridPicker {
                                       runSpacing: 10,
                                       children: entry.value.map((col) {
                                         final isSelected = !config.isBlurredBg && !config.isPaperTextureBg && config.backgroundColor.toARGB32() == col.toARGB32();
-                                        return InkWell(
+                                        return OneUIPressable(
                                           onTap: () {
                                             onChanged(config.copyWith(isBlurredBg: false, isPaperTextureBg: false, backgroundColor: col));
                                             Navigator.pop(context);

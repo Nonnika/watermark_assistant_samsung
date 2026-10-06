@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'one_ui_pressable.dart';
 import '../theme/one_ui_theme.dart';
 
 class AnimatedSubTabs extends StatelessWidget {
@@ -54,8 +55,7 @@ class AnimatedSubTabs extends StatelessWidget {
                 children: List.generate(labels.length, (index) {
                   final isSelected = selectedIndex == index;
                   return Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
+                    child: OneUIPressable(
                       onTap: () => onTabSelected(index),
                       child: Center(
                         child: AnimatedDefaultTextStyle(

@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import '../one_ui_pressable.dart';
 import '../../services/preset_watermarks.dart';
 import '../../services/watermark_processor.dart';
 import '../../theme/one_ui_theme.dart';
@@ -73,7 +74,7 @@ class PresetPickerSheet {
                           final preset = PresetWatermarkService.presets[index];
                           final isSelected = currentWatermarkName == preset.title;
 
-                          return InkWell(
+                          return OneUIPressable(
                             onTap: () async {
                               Navigator.pop(context);
                               final bytes = await preset.generateBytes();

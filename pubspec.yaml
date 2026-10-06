@@ -63,6 +63,7 @@ flutter:
   assets:
     - res/
     - assets/images/
+    - assets/logo/
 
   shaders:
     - shaders/progressive_blur.frag

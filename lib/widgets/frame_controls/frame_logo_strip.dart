@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../one_ui_pressable.dart';
 import '../../models/frame_watermark_config.dart';
 import '../../services/app_strings.dart';
 import '../../services/brand_logos.dart';
@@ -98,13 +99,12 @@ class FrameLogoStrip extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   // 反色开关
-                  InkWell(
+                  OneUIPressable(
                     onTap: () {
                       setDialogState(() {
                         dialogInverted = !dialogInverted;
                       });
                     },
-                    borderRadius: BorderRadius.circular(10),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
                       child: Row(
@@ -303,9 +303,8 @@ class FrameLogoStrip extends StatelessWidget {
                         if (isAdd) {
                           return SizedBox(
                             width: itemWidth,
-                            child: InkWell(
+                            child: OneUIPressable(
                               onTap: () => _pickCustomLogo(context),
-                              borderRadius: BorderRadius.circular(13),
                               child: Container(
                                 height: 37,
                                 alignment: Alignment.center,
@@ -333,7 +332,7 @@ class FrameLogoStrip extends StatelessWidget {
 
                         return SizedBox(
                           width: itemWidth,
-                          child: InkWell(
+                          child: OneUIPressable(
                             onTap: () {
                               if (isCustom) {
                                 final customItem = BrandLogoService.userCustomLogos.firstWhere((c) => c.id == id);
@@ -352,7 +351,6 @@ class FrameLogoStrip extends StatelessWidget {
                             onLongPress: isCustom
                                 ? () => _confirmDeleteCustomLogo(context, id, name)
                                 : null,
-                            borderRadius: BorderRadius.circular(13),
                             child: Container(
                               height: 37,
                               alignment: Alignment.center,
@@ -397,9 +395,8 @@ class FrameLogoStrip extends StatelessWidget {
         // 2. 自定义 Logo 反色快捷开关按钮
         if (isCustomActive) ...[
           const SizedBox(width: 8),
-          InkWell(
+          OneUIPressable(
             onTap: () => onChanged(config.copyWith(isLogoInverted: !config.isLogoInverted)),
-            borderRadius: BorderRadius.circular(16),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 160),
               height: 44,

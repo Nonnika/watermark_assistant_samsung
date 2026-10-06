@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'one_ui_pressable.dart';
 import '../theme/one_ui_theme.dart';
 
 class OneUISegmentedPill<T> extends StatelessWidget {
@@ -35,7 +36,7 @@ class OneUISegmentedPill<T> extends StatelessWidget {
           final isSelected = item == selectedItem;
 
           return Expanded(
-            child: GestureDetector(
+            child: OneUIPressable(
               onTap: () => onItemSelected(item),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
