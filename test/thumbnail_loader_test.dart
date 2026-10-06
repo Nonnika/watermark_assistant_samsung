@@ -152,4 +152,56 @@ void main() {
       expect(loader.cachedBytes, 2);
     },
   );
+
+  test('configure shrinks byte budget and evicts in LRU order', () async {
+    final loader = ThumbnailLoader(
+      maxCacheBytes: 6 * 1024,
+      maxCacheEntries: 10,
+    );
+    Future<void> put(Object key) async {
+      await loader.request(key, () async => Uint8List(2 * 1024)).bytes;
+    }
+
+    await put('a');
+    await put('b');
+    await put('c');
+    expect(loader.cachedCount, 3);
+    loader.configure(maxCacheBytes: 2 * 1024, maxCacheEntries: 10);
+    expect(loader.cachedCount, 1);
+    expect(loader.cachedBytes, 2 * 1024);
+    // 最新条目保留，旧条目被驱逐
+    expect(loader.getCached('a'), isNull);
+    expect(loader.getCached('b'), isNull);
+    expect(loader.getCached('c'), isNotNull);
+  });
+
+  test('configure shrinks entry budget and drops oldest first', () async {
+    final loader = ThumbnailLoader(maxCacheBytes: 10, maxCacheEntries: 3);
+    for (var i = 0; i < 3; i++) {
+      await loader.request(i, () async => Uint8List(1)).bytes;
+    }
+    loader.configure(maxCacheEntries: 1);
+    expect(loader.cachedCount, 1);
+    expect(loader.getCached(0), isNull);
+    expect(loader.getCached(2), isNotNull);
+  });
+
+  test('configure raises concurrency and drains the queued load', () async {
+    final loader = ThumbnailLoader(maxConcurrent: 1);
+    final gates = List.generate(2, (_) => Completer<Uint8List?>());
+    final calls = <int>[];
+    ThumbnailRequest request(int id) => loader.request(id, () {
+          calls.add(id);
+          return gates[id].future;
+        });
+
+    final first = request(0);
+    final second = request(1);
+    expect(calls, [0]);
+    loader.configure(maxConcurrent: 2);
+    expect(calls, [0, 1]);
+    gates[0].complete(Uint8List(1));
+    gates[1].complete(Uint8List(1));
+    await Future.wait([first.bytes, second.bytes]);
+  });
 }

@@ -337,32 +337,33 @@ class ColorGridPicker {
                                       runSpacing: 10,
                                       children: entry.value.map((col) {
                                         final isSelected = !config.isBlurredBg && !config.isPaperTextureBg && config.backgroundColor.toARGB32() == col.toARGB32();
-                                        return OneUIPressable(
-                                          onTap: () {
-                                            onChanged(config.copyWith(isBlurredBg: false, isPaperTextureBg: false, backgroundColor: col));
-                                            Navigator.pop(context);
-                                          },
-                                          customBorder: const CircleBorder(),
-                                          child: Container(
-                                            width: 38,
-                                            height: 38,
-                                            decoration: BoxDecoration(
-                                              color: col,
-                                              shape: BoxShape.circle,
-                                              border: Border.all(
-                                                color: isSelected ? const Color(0xFFFFD600) : Colors.white24,
-                                                width: isSelected ? 3.0 : 1.0,
+                                        return ClipOval(
+                                          child: OneUIPressable(
+                                            onTap: () {
+                                              onChanged(config.copyWith(isBlurredBg: false, isPaperTextureBg: false, backgroundColor: col));
+                                              Navigator.pop(context);
+                                            },
+                                            child: Container(
+                                              width: 38,
+                                              height: 38,
+                                              decoration: BoxDecoration(
+                                                color: col,
+                                                shape: BoxShape.circle,
+                                                border: Border.all(
+                                                  color: isSelected ? const Color(0xFFFFD600) : Colors.white24,
+                                                  width: isSelected ? 3.0 : 1.0,
+                                                ),
                                               ),
+                                              child: isSelected
+                                                  ? Icon(
+                                                      Icons.check_rounded,
+                                                      size: 20,
+                                                      color: col.computeLuminance() > 0.5
+                                                          ? Colors.black
+                                                          : Colors.white,
+                                                    )
+                                                  : null,
                                             ),
-                                            child: isSelected
-                                                ? Icon(
-                                                    Icons.check_rounded,
-                                                    size: 20,
-                                                    color: col.computeLuminance() > 0.5
-                                                        ? Colors.black
-                                                        : Colors.white,
-                                                  )
-                                                : null,
                                           ),
                                         );
                                       }).toList(),

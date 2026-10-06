@@ -78,6 +78,19 @@ class DevicePhotoService {
 
   static void clearThumbnailCache() => _thumbnails.clearCache();
 
+  /// 运行时调整缩略图管线容量（内存分档 / 降级信号），立即驱逐超额缓存。
+  static void applyThumbnailPolicy({
+    required int maxCacheBytes,
+    required int maxCacheEntries,
+    required int maxConcurrent,
+  }) {
+    _thumbnails.configure(
+      maxCacheBytes: maxCacheBytes,
+      maxCacheEntries: maxCacheEntries,
+      maxConcurrent: maxConcurrent,
+    );
+  }
+
   /// Decode at a bounded size, keeping full file bytes out of the Dart heap.
   /// PNG encoding runs in the engine instead of a synchronous Dart JPEG loop.
   static Future<Uint8List?> _downscaleToThumbnail(

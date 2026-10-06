@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import '../one_ui_pressable.dart';
 import 'package:flutter/services.dart';
@@ -79,51 +81,64 @@ class LandingPickScreen extends StatelessWidget {
 
 /// 右上角「关于」胶囊按钮
 class _TopAboutButton extends StatelessWidget {
+  static final _blurFilter = ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16);
+
   final bool isDark;
 
   const _TopAboutButton({required this.isDark});
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: OneUIPressable(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          AboutPage.open(context);
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.42),
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.35),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.info_outline_rounded,
-                size: 16,
-                color: Colors.white,
-              ),
-              SizedBox(width: 5),
-              Text(
-                '关于',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                  letterSpacing: -0.2,
+    // 深色毛玻璃胶囊 (BackdropFilter 实时模糊底下的海报轮播)
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter.grouped(
+        filter: _blurFilter,
+        child: Material(
+          color: Colors.transparent,
+          child: OneUIPressable(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              AboutPage.open(context);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.30),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.22),
+                  width: 1.0,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
-            ],
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 16,
+                    color: Colors.white,
+                  ),
+                  SizedBox(width: 5),
+                  Text(
+                    '关于',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),

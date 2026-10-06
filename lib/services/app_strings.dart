@@ -35,6 +35,24 @@ class AppStrings {
   static String get toggleTheme => isZh ? '切换主题' : 'Toggle Theme';
   static String get toggleLang => isZh ? 'English' : '中文';
 
+  // Landing feature carousel
+  static String get bannerFrameTitle => isZh ? '边框水印' : 'Frame Watermark';
+  static String get bannerFrameSubtitle => isZh
+      ? '品牌标识与拍摄参数，融入留白边框'
+      : 'Brand logos and camera details in a clean photo border';
+  static String get bannerOverlayTitle => isZh ? '叠加水印' : 'Overlay Watermark';
+  static String get bannerOverlaySubtitle => isZh
+      ? '自由放置 PNG，调整位置与大小'
+      : 'Place your PNG watermark and adjust its position and size';
+  static String get bannerGestureTitle => isZh ? '手势操作' : 'Gesture Controls';
+  static String get bannerGestureSubtitle => isZh
+      ? '上下切参数，左右调数值'
+      : 'Swipe vertically to choose, horizontally to adjust';
+  static String get bannerMotionTitle => isZh ? '动态照片' : 'Motion Photos';
+  static String get bannerMotionSubtitle => isZh
+      ? '保留动态，也保留水印'
+      : 'Keep the motion, keep the watermark';
+
   // Bottom Toolbars
   static String get toolBrandLogo => isZh ? '品牌 Logo' : 'Brand Logo';
   static String get toolFrameColor => isZh ? '相框颜色' : 'Frame Color';

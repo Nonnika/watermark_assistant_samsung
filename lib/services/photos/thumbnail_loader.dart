@@ -23,9 +23,9 @@ class ThumbnailRequest {
 /// Deduplicates both queued and active loads, prioritizes visible cells, and
 /// bounds retained encoded thumbnails by bytes as well as entry count.
 class ThumbnailLoader {
-  final int maxConcurrent;
-  final int maxCacheBytes;
-  final int maxCacheEntries;
+  int maxConcurrent;
+  int maxCacheBytes;
+  int maxCacheEntries;
   final _cache = <Object, Uint8List>{};
   final _loads = <Object, _ThumbnailLoad>{};
   final _visible = <Object, _ThumbnailLoad>{};
@@ -43,6 +43,28 @@ class ThumbnailLoader {
 
   int get cachedBytes => _cacheBytes;
   int get cachedCount => _cache.length;
+
+  /// Adjusts capacity at runtime (memory tiering, degradation signals) and
+  /// immediately evicts anything the new limits no longer allow.
+  void configure({int? maxConcurrent, int? maxCacheBytes, int? maxCacheEntries}) {
+    if (maxConcurrent != null) {
+      assert(maxConcurrent > 0);
+      this.maxConcurrent = maxConcurrent;
+    }
+    if (maxCacheBytes != null) {
+      assert(maxCacheBytes >= 0);
+      this.maxCacheBytes = maxCacheBytes;
+    }
+    if (maxCacheEntries != null) {
+      assert(maxCacheEntries >= 0);
+      this.maxCacheEntries = maxCacheEntries;
+    }
+    while (_cache.isNotEmpty &&
+        (_cacheBytes > this.maxCacheBytes || _cache.length > this.maxCacheEntries)) {
+      _cacheBytes -= _cache.remove(_cache.keys.first)!.buffer.lengthInBytes;
+    }
+    _drain();
+  }
 
   Uint8List? getCached(Object key) {
     final bytes = _cache.remove(key);

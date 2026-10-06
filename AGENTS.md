@@ -24,6 +24,6 @@ Android-only Flutter app (Samsung Galaxy / One UI styled photo watermarking tool
 
 - `tool/generate_icons.dart` and `test/generate_icons_test.dart` are codegen: they render launcher icons from `PebbleShadowAndCardPainter` and write PNGs into `android/app/src/main/res/mipmap-*`. Running the full suite rewrites those files.
 - Assets are declared for both `res/` and `assets/images/` in `pubspec.yaml`; banner images exist duplicated in both directories — keep both in sync or pick one.
-- Release builds sign with debug keys (no release signing config yet); `applicationId` is still the template `com.example.watermark_samsung`.
+- Release builds sign with a dedicated upload keystore: `android/key.properties` (gitignored, points to `/Users/nonnika/upload-keystore.jks`) is read by `signingConfigs.release` in `android/app/build.gradle.kts`; release also enables R8 minify + resource shrink. `applicationId` is still the template `com.example.watermark_samsung`.
 - Manifest sets `largeHeap`, `requestLegacyExternalStorage`, and `android:colorMode="hdr"` — required for full-size image decoding and Ultra HDR output; don't remove casually.
 - `CLAUDE.md` is a symlink to `AGENTS.md` — edit `AGENTS.md` only; don't create a divergent copy.

@@ -20,8 +20,8 @@ import java.util.concurrent.Executors
 /**
  * 单一 MethodChannel `com.example.watermark_samsung/ultra_hdr` 的装配层：
  * 仅负责通道注册、权限与 HDR 窗口模式等 Activity 绑定逻辑，其余能力按功能域
- * 委托给 [UltraHdrEncoder]、[MediaStoreHelper]、[VideoWatermarker]、[MotionPhotoProcessor]
- * 与字节级 [SefTrailerCodec]。
+ * 委托给 [UltraHdrEncoder]、[MediaStoreHelper]、[VideoWatermarker]、[MotionPhotoProcessor]、
+ * 字节级 [SefTrailerCodec] 与运行时守护 [RuntimeGuard]。
  */
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.watermark_samsung/ultra_hdr"
@@ -50,16 +50,35 @@ class MainActivity : FlutterActivity() {
     private val mediaStoreHelper by lazy { MediaStoreHelper(this, heavyTaskExecutor, thumbnailExecutor) }
     private val videoWatermarker by lazy { VideoWatermarker(this, heavyTaskExecutor) }
     private val motionPhotoProcessor by lazy { MotionPhotoProcessor(this, heavyTaskExecutor) }
+    private val runtimeGuard by lazy { RuntimeGuard(this) }
 
     override fun onDestroy() {
+        runtimeGuard.detachChannel()
         thumbnailExecutor.shutdown()
         heavyTaskExecutor.shutdown()
         super.onDestroy()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // 在引擎初始化前接管未捕获异常，OOM 标记才能覆盖启动阶段
+        runtimeGuard.install()
         super.onCreate(savedInstanceState)
         enableHdrMode(true)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        runtimeGuard.setForeground(true)
+    }
+
+    override fun onStop() {
+        runtimeGuard.setForeground(false)
+        super.onStop()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        runtimeGuard.onTrimMemory(level)
     }
 
     private fun enableHdrMode(enable: Boolean) {
@@ -117,8 +136,16 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+        val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+        runtimeGuard.attachChannel(channel)
+        channel.setMethodCallHandler { call, result ->
             when (call.method) {
+                "getRuntimeMemoryInfo" -> {
+                    result.success(runtimeGuard.memoryInfo())
+                }
+                "getRuntimeState" -> {
+                    result.success(runtimeGuard.runtimeState())
+                }
                 "checkStoragePermission" -> {
                     result.success(checkStoragePermission())
                 }
