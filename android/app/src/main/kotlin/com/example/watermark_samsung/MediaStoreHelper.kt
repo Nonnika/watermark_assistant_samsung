@@ -18,12 +18,11 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
 
 private const val TAG_MEDIA = "UltraHDR"
 
-/** MediaStore 相册读写：图片保存、相册查询、缩略图、原图字节、EXIF 读取与 RGBA 编码 */
+/** MediaStore 相册读写：图片保存、相册查询、缩略图、原图字节、EXIF 读取 */
 class MediaStoreHelper(
     private val activity: Activity,
     private val heavyTaskExecutor: ExecutorService,
@@ -440,39 +439,6 @@ class MediaStoreHelper(
             } catch (e: Exception) {
                 Log.e(TAG_MEDIA, "getExif error: ${e.message}", e)
                 result.let { r -> activity.runOnUiThread { r.success(null) } }
-            }
-        }
-    }
-
-    fun compressRgbaToJpeg(call: MethodCall, result: MethodChannel.Result) {
-        val rgbaBytes = call.argument<ByteArray>("rgba")
-        val width = call.argument<Int>("width") ?: 0
-        val height = call.argument<Int>("height") ?: 0
-        val quality = call.argument<Int>("quality") ?: 95
-
-        if (rgbaBytes == null || width <= 0 || height <= 0) {
-            result.error("INVALID_ARGS", "Missing RGBA data", null)
-            return
-        }
-
-        // 高通 SoC 优化：全尺寸位图编码移出主线程，ADPF 提速 + Snapdragon 硬件编解码管线
-        heavyTaskExecutor.execute {
-            Process.setThreadPriority(Process.THREAD_PRIORITY_LESS_FAVORABLE)
-            try {
-                val jpeg = activity.runWithAdpfBoost(150L) {
-                    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                    val buffer = ByteBuffer.wrap(rgbaBytes)
-                    bitmap.copyPixelsFromBuffer(buffer)
-
-                    val baos = ByteArrayOutputStream(rgbaBytes.size / 5)
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, quality, baos)
-                    bitmap.recycle()
-                    baos.toByteArray()
-                }
-                activity.runOnUiThread { result.success(jpeg) }
-            } catch (e: Exception) {
-                Log.e(TAG_MEDIA, "compressRgbaToJpeg error: ${e.message}", e)
-                activity.runOnUiThread { result.error("ENCODE_FAILED", e.localizedMessage, null) }
             }
         }
     }

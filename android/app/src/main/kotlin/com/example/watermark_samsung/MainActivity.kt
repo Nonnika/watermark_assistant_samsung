@@ -50,6 +50,7 @@ class MainActivity : FlutterActivity() {
     private val mediaStoreHelper by lazy { MediaStoreHelper(this, heavyTaskExecutor, thumbnailExecutor) }
     private val videoWatermarker by lazy { VideoWatermarker(this, heavyTaskExecutor) }
     private val motionPhotoProcessor by lazy { MotionPhotoProcessor(this, heavyTaskExecutor) }
+    private val tiledJpegEncoder by lazy { TiledJpegEncoder(this, heavyTaskExecutor) }
     private val runtimeGuard by lazy { RuntimeGuard(this) }
 
     override fun onDestroy() {
@@ -196,7 +197,10 @@ class MainActivity : FlutterActivity() {
                 "getPhotoThumbnail" -> mediaStoreHelper.getPhotoThumbnail(call, result)
                 "getPhotoBytes" -> mediaStoreHelper.getPhotoBytes(call, result)
                 "getExif" -> mediaStoreHelper.getExif(call, result)
-                "compressRgbaToJpeg" -> mediaStoreHelper.compressRgbaToJpeg(call, result)
+                "tiledJpegBegin" -> tiledJpegEncoder.begin(call, result)
+                "tiledJpegWrite" -> tiledJpegEncoder.write(call, result)
+                "tiledJpegFinish" -> tiledJpegEncoder.finish(call, result)
+                "tiledJpegAbort" -> tiledJpegEncoder.abort(call, result)
                 "watermarkVideo" -> videoWatermarker.watermarkVideo(call, result)
                 "extractMotionPhotoNative" -> motionPhotoProcessor.extractMotionPhotoNative(call, result)
                 "compositeMotionPhotoNative" -> motionPhotoProcessor.compositeMotionPhotoNative(call, result)

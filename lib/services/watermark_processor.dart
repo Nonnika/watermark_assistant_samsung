@@ -1,10 +1,8 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image/image.dart' as img;
 
 import '../models/exif_info.dart';
 import '../models/frame_watermark_config.dart';
@@ -12,16 +10,13 @@ import '../models/image_item.dart';
 import '../models/watermark_config.dart';
 import 'canvas/floating_png_renderer.dart';
 import 'canvas/frame_canvas_renderer.dart';
+import 'canvas/tiled_jpeg_encoder.dart';
 import 'exif_service.dart';
 import 'motion_photo_service.dart';
 import 'ultra_hdr_service.dart';
 
 /// 水印核心处理器：负责图片预解码、Canvas 水印合成与全分辨率文件导出
 class WatermarkProcessor {
-  static const MethodChannel _nativeChannel = MethodChannel(
-    'com.example.watermark_samsung/ultra_hdr',
-  );
-
   // RGB 反色滤镜矩阵 (保持 Alpha 透明度不变)
   static const ColorFilter invertColorFilter =
       FloatingPngRenderer.invertColorFilter;
@@ -290,14 +285,14 @@ class WatermarkProcessor {
     }
 
     final picture = recorder.endRecording();
-    final ui.Image renderedImage;
-    try {
-      renderedImage = await picture.toImage(finalW.toInt(), finalH.toInt());
-    } finally {
-      picture.dispose();
-    }
 
     if (outputFormat.toLowerCase() == 'png') {
+      final ui.Image renderedImage;
+      try {
+        renderedImage = await picture.toImage(finalW.toInt(), finalH.toInt());
+      } finally {
+        picture.dispose();
+      }
       final ByteData? byteData;
       try {
         byteData = await renderedImage.toByteData(
@@ -317,47 +312,17 @@ class WatermarkProcessor {
       }
       return pngBytes;
     } else {
-      final width = renderedImage.width;
-      final height = renderedImage.height;
-      final ByteData? byteData;
+      // 分块渲染并流式交给 Android 系统 JPEG 编码器，避免整幅离屏纹理与整幅 RGBA 回读/跨通道拷贝
+      final Uint8List jpgBytes;
       try {
-        byteData = await renderedImage.toByteData(
-          format: ui.ImageByteFormat.rawRgba,
+        jpgBytes = await TiledJpegEncoder.encode(
+          picture,
+          width: finalW.toInt(),
+          height: finalH.toInt(),
+          quality: quality,
         );
       } finally {
-        renderedImage.dispose();
-      }
-      final rgbaBytes = byteData!.buffer.asUint8List();
-
-      Uint8List? jpgBytes;
-      // 优先调用 Android 系统底层硬件加速 JPEG 编码器 (Qualcomm NEON / libjpeg-turbo 硬件加速)
-      if (Platform.isAndroid) {
-        try {
-          final nativeJpg = await _nativeChannel.invokeMethod<Uint8List>(
-            'compressRgbaToJpeg',
-            {
-              'rgba': rgbaBytes,
-              'width': width,
-              'height': height,
-              'quality': quality,
-            },
-          );
-          if (nativeJpg != null && nativeJpg.isNotEmpty) {
-            jpgBytes = nativeJpg;
-          }
-        } catch (e) {
-          debugPrint('[WatermarkProcessor] Hardware JPEG encode fallback: $e');
-        }
-      }
-
-      if (jpgBytes == null) {
-        final image = img.Image.fromBytes(
-          width: width,
-          height: height,
-          bytes: rgbaBytes.buffer,
-          order: img.ChannelOrder.rgba,
-        );
-        jpgBytes = img.encodeJpg(image, quality: quality);
+        picture.dispose();
       }
       Uint8List finalJpgBytes = jpgBytes;
 
