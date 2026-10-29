@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -257,23 +258,16 @@ class UltraHdrComposer {
     );
   }
 
-  /// 纯 Dart 实现的标准级 Ultra HDR Gainmap 几何适配与 MPF/XMP 注入
-  static Future<Uint8List> _synthesizeUltraHdrInDart({
-    required Uint8List originalBytes,
-    required Uint8List sdrCompositeBytes,
+  /// 在任意 isolate 中可执行：将原 Gainmap 按照片区域缩放贴入目标画幅，并编码为 JPEG
+  static Uint8List _buildAlignedGainmapJpeg({
+    required Uint8List? rawGainmap,
     required double photoLeft,
     required double photoTop,
     required double photoWidth,
     required double photoHeight,
     required double totalWidth,
     required double totalHeight,
-    int quality = 95,
-    Uint8List? injectedGainmapJpeg,
-    UltraHdrMetadata? injectedMetadata,
-  }) async {
-    final meta = injectedMetadata ?? UltraHdrDetector.parseMetadata(originalBytes);
-    final rawGainmap = injectedGainmapJpeg ?? UltraHdrDetector.extractGainmapJpeg(originalBytes);
-
+  }) {
     img.Image? gainmapImg;
     if (rawGainmap != null) {
       try {
@@ -281,8 +275,7 @@ class UltraHdrComposer {
       } catch (_) {}
     }
 
-    // 1. 构建与目标画幅完美对齐的辅助 Gainmap JPEG
-    Uint8List finalGainmapBytes;
+    final Uint8List finalGainmapBytes;
     if (gainmapImg != null) {
       // 注意：Gainmap 与主图在 MPF 中是同坐标系配对存储的，
       // Android ImageDecoder 会统一处理主图和 Gainmap 的 EXIF 旋转。
@@ -304,15 +297,49 @@ class UltraHdrComposer {
       final scaledPhotoGainmap = img.copyResize(gainmapImg, width: dstW, height: dstH);
       img.compositeImage(canvasGainmap, scaledPhotoGainmap, dstX: dstX, dstY: dstY);
 
-      final rawJpg = img.encodeJpg(canvasGainmap, quality: 90);
-      finalGainmapBytes = Uint8List.fromList(rawJpg);
+      finalGainmapBytes = img.encodeJpg(canvasGainmap, quality: 90);
     } else {
       final defaultGw = 512;
       final defaultGh = (512 * (totalHeight / totalWidth)).toInt().clamp(1, 4096);
       final defaultGm = img.Image(width: defaultGw, height: defaultGh);
       img.fill(defaultGm, color: img.ColorRgb8(0, 0, 0));
-      finalGainmapBytes = Uint8List.fromList(img.encodeJpg(defaultGm, quality: 85));
+      finalGainmapBytes = img.encodeJpg(defaultGm, quality: 85);
     }
+    return finalGainmapBytes;
+  }
+
+  /// 纯 Dart 实现的标准级 Ultra HDR Gainmap 几何适配与 MPF/XMP 注入
+  static Future<Uint8List> _synthesizeUltraHdrInDart({
+    required Uint8List originalBytes,
+    required Uint8List sdrCompositeBytes,
+    required double photoLeft,
+    required double photoTop,
+    required double photoWidth,
+    required double photoHeight,
+    required double totalWidth,
+    required double totalHeight,
+    int quality = 95,
+    Uint8List? injectedGainmapJpeg,
+    UltraHdrMetadata? injectedMetadata,
+  }) async {
+    final meta = injectedMetadata ?? UltraHdrDetector.parseMetadata(originalBytes);
+    final rawGainmap = injectedGainmapJpeg ?? UltraHdrDetector.extractGainmapJpeg(originalBytes);
+
+    // 1. 构建与目标画幅完美对齐的辅助 Gainmap JPEG
+    // 解码/缩放/编码为纯 CPU 计算，放到后台 isolate，避免导出时 UI 线程卡顿。
+    // rawGainmap 可能是原图的 sublistView，先拷贝出独立小缓冲，避免整张原图随消息复制。
+    final gainmapCopy = rawGainmap == null ? null : Uint8List.fromList(rawGainmap);
+    final Uint8List finalGainmapBytes = await Isolate.run(
+      () => _buildAlignedGainmapJpeg(
+        rawGainmap: gainmapCopy,
+        photoLeft: photoLeft,
+        photoTop: photoTop,
+        photoWidth: photoWidth,
+        photoHeight: photoHeight,
+        totalWidth: totalWidth,
+        totalHeight: totalHeight,
+      ),
+    );
 
     // 2. 为 Secondary Gainmap JPEG 组装标准的 JPEG 结构 (SOI -> APP1 XMP -> Tables & Scan)
     final secondaryXmpString = generateSecondaryGainmapXmp(meta);

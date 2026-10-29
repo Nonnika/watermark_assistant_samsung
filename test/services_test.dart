@@ -34,6 +34,30 @@ void main() {
     expect(palette.length >= 3, isTrue);
   });
 
+  test('PhotoColorExtractor RGBA path matches img.Image path', () {
+    final image = img.Image(width: 100, height: 100, numChannels: 4);
+    img.fillRect(image, x1: 0, y1: 0, x2: 50, y2: 100, color: img.ColorRgba8(255, 0, 0, 255));
+    img.fillRect(image, x1: 50, y1: 0, x2: 100, y2: 100, color: img.ColorRgba8(0, 0, 255, 255));
+    final rgba = image.getBytes(order: img.ChannelOrder.rgba);
+
+    final fromRgba = PhotoColorExtractor.extractPaletteFromRgba(rgba, 100, 100);
+    expect(fromRgba, PhotoColorExtractor.extractPalette(image));
+    expect(fromRgba.length, 2);
+  });
+
+  testWidgets('PhotoColorExtractor async path decodes via engine with downsampling', (tester) async {
+    final image = img.Image(width: 600, height: 400);
+    img.fill(image, color: img.ColorRgb8(0, 200, 0));
+    final png = img.encodePng(image);
+
+    final palette = await tester.runAsync(
+      () => PhotoColorExtractor.extractPaletteFromBytesAsync(png),
+    );
+    expect(palette, isNotNull);
+    expect(palette!.length, 1);
+    expect((palette.first.g * 255).round(), 200);
+  });
+
   test('AppStrings supports dynamic Chinese and English switching', () {
     AppStrings.currentLanguage.value = AppLanguage.zh;
     expect(AppStrings.appName, '水印助手');

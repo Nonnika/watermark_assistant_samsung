@@ -356,6 +356,36 @@ void main() {
     },
   );
 
+  test(
+    'Export reuses import-time HDR/motion results without re-scanning the original',
+    () async {
+      UltraHdrDetector.debugOverrideIsAndroid = true;
+      final calls = <String>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call.method);
+        return null;
+      });
+      final primary = _jpeg();
+      final baseImage = await WatermarkProcessor.decodeImageFromBytes(primary);
+      addTearDown(baseImage.dispose);
+      final output = await WatermarkProcessor.compositeFullResolutionUnified(
+        baseImage: baseImage,
+        type: WatermarkType.floatingPng,
+        watermarkImage: null,
+        pngConfig: const WatermarkConfig(),
+        logoImage: null,
+        frameConfig: const FrameWatermarkConfig(),
+        outputFormat: 'jpg',
+        originalBytes: primary,
+        knownIsUltraHdr: false,
+        knownIsMotionPhoto: false,
+      );
+      expect(img.decodeJpg(output), isNotNull);
+      expect(calls, isNot(contains('hasGainmap')));
+      expect(calls, isNot(contains('extractMotionPhotoNative')));
+    },
+  );
+
   test('Gallery uses full files including small JPEGs and gainmaps outside head/tail slices', () async {
     final directory = await Directory.systemTemp.createTemp('hdr-test');
     addTearDown(() => directory.delete(recursive: true));

@@ -1,5 +1,6 @@
 import 'dart:isolate';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 
@@ -27,7 +28,11 @@ class PhotoColorExtractor {
     _cache[key] = palette;
   }
 
-  /// 后台 isolate 提取调色板：全分辨率解码不阻塞 UI 线程
+  static const int _sampleWidth = 128;
+
+  /// 异步提取调色板：优先用引擎原生解码器直接按 128 像素宽降采样解码
+  /// （JPEG 走 DCT 缩放，免去 50MP 全尺寸纯 Dart 解码的数秒耗时与数百 MB 内存），
+  /// 引擎无法解码时回退到后台 isolate 纯 Dart 解码。
   static Future<List<Color>> extractPaletteFromBytesAsync(Uint8List? bytes) async {
     if (bytes == null || bytes.isEmpty) return [];
     final cacheKey = _contentHash(bytes);
@@ -35,14 +40,45 @@ class PhotoColorExtractor {
     if (cached != null) return cached;
 
     try {
-      final rgbList = await Isolate.run(() => _decodeAndExtractRgb(bytes));
-      final palette = <Color>[
-        for (final rgb in rgbList) Color.fromARGB(255, rgb[0], rgb[1], rgb[2]),
-      ];
+      List<Color> palette;
+      try {
+        palette = await _extractWithEngineDecoder(bytes);
+      } catch (_) {
+        final rgbList = await Isolate.run(() => _decodeAndExtractRgb(bytes));
+        palette = <Color>[
+          for (final rgb in rgbList) Color.fromARGB(255, rgb[0], rgb[1], rgb[2]),
+        ];
+      }
       _store(cacheKey, palette);
       return palette;
     } catch (_) {
       return [];
+    }
+  }
+
+  static Future<List<Color>> _extractWithEngineDecoder(Uint8List bytes) async {
+    final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+    ui.ImageDescriptor? descriptor;
+    ui.Codec? codec;
+    ui.Image? image;
+    try {
+      descriptor = await ui.ImageDescriptor.encoded(buffer);
+      codec = await descriptor.instantiateCodec(
+        targetWidth: descriptor.width > _sampleWidth ? _sampleWidth : null,
+      );
+      image = (await codec.getNextFrame()).image;
+      final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (data == null) throw StateError('rawRgba readback failed');
+      return extractPaletteFromRgba(
+        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+        image.width,
+        image.height,
+      );
+    } finally {
+      image?.dispose();
+      codec?.dispose();
+      descriptor?.dispose();
+      buffer.dispose();
     }
   }
 
@@ -92,49 +128,66 @@ class PhotoColorExtractor {
 
     try {
       final List<Color> sampled = [];
-      // 采样步长，快速抽取 ~300 个像素点
-      final stepX = (image.width / 20).clamp(1, 100).toInt();
-      final stepY = (image.height / 20).clamp(1, 100).toInt();
-
-      for (int y = 0; y < image.height; y += stepY) {
-        for (int x = 0; x < image.width; x += stepX) {
-          final pixel = image.getPixel(x, y);
-          final r = pixel.r.toInt();
-          final g = pixel.g.toInt();
-          final b = pixel.b.toInt();
-          final a = pixel.a.toInt();
-          if (a > 128) {
-            sampled.add(Color.fromARGB(255, r, g, b));
-          }
+      _forEachSample(image.width, image.height, (x, y) {
+        final pixel = image.getPixel(x, y);
+        if (pixel.a.toInt() > 128) {
+          sampled.add(Color.fromARGB(
+              255, pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()));
         }
-      }
-
-      if (sampled.isEmpty) return [];
-
-      // 挑选视觉差异明显的代表色
-      final List<Color> distinctColors = [];
-      for (final color in sampled) {
-        bool isDuplicate = false;
-        for (final existing in distinctColors) {
-          // Color.r/g/b 为 0.0-1.0 归一化通道值，×255 换算回 0-255 通道差后比较
-          final dr = (color.r - existing.r) * 255;
-          final dg = (color.g - existing.g) * 255;
-          final db = (color.b - existing.b) * 255;
-          final dist = dr * dr + dg * dg + db * db;
-          if (dist < 1600) {
-            isDuplicate = true;
-            break;
-          }
-        }
-        if (!isDuplicate) {
-          distinctColors.add(color);
-          if (distinctColors.length >= 8) break;
-        }
-      }
-
-      return distinctColors;
+      });
+      return _pickDistinct(sampled);
     } catch (_) {
       return [];
     }
+  }
+
+  /// 与 [extractPalette] 相同的采样与选色规则，输入为 RGBA8888 像素缓冲
+  static List<Color> extractPaletteFromRgba(Uint8List rgba, int width, int height) {
+    final List<Color> sampled = [];
+    _forEachSample(width, height, (x, y) {
+      final i = (y * width + x) * 4;
+      if (rgba[i + 3] > 128) {
+        sampled.add(Color.fromARGB(255, rgba[i], rgba[i + 1], rgba[i + 2]));
+      }
+    });
+    return _pickDistinct(sampled);
+  }
+
+  /// 采样步长，快速抽取 ~300 个像素点
+  static void _forEachSample(int width, int height, void Function(int x, int y) visit) {
+    final stepX = (width / 20).clamp(1, 100).toInt();
+    final stepY = (height / 20).clamp(1, 100).toInt();
+    for (int y = 0; y < height; y += stepY) {
+      for (int x = 0; x < width; x += stepX) {
+        visit(x, y);
+      }
+    }
+  }
+
+  static List<Color> _pickDistinct(List<Color> sampled) {
+    if (sampled.isEmpty) return [];
+
+    // 挑选视觉差异明显的代表色
+    final List<Color> distinctColors = [];
+    for (final color in sampled) {
+      bool isDuplicate = false;
+      for (final existing in distinctColors) {
+        // Color.r/g/b 为 0.0-1.0 归一化通道值，×255 换算回 0-255 通道差后比较
+        final dr = (color.r - existing.r) * 255;
+        final dg = (color.g - existing.g) * 255;
+        final db = (color.b - existing.b) * 255;
+        final dist = dr * dr + dg * dg + db * db;
+        if (dist < 1600) {
+          isDuplicate = true;
+          break;
+        }
+      }
+      if (!isDuplicate) {
+        distinctColors.add(color);
+        if (distinctColors.length >= 8) break;
+      }
+    }
+
+    return distinctColors;
   }
 }

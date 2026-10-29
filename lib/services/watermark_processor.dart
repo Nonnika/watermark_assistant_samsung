@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 
+import '../models/exif_info.dart';
 import '../models/frame_watermark_config.dart';
 import '../models/image_item.dart';
 import '../models/watermark_config.dart';
@@ -76,17 +78,27 @@ class WatermarkProcessor {
     required String path,
     required Uint8List bytes,
   }) async {
-    final exifInfo = await ExifService.extractExifAsync(bytes, path: path);
-    final isUltraHdr = await UltraHdrService.checkIsUltraHdr(bytes);
-    final motionInfo = await MotionPhotoService.extractMotionVideoAsync(
-      bytes,
-      path: path,
-    );
+    // 四项互不依赖：原生通道调用与引擎 IO 线程上的预览解码并行，缩短单张导入耗时
+    final ExifInfo exifInfo;
+    final bool isUltraHdr;
+    final MotionVideoInfo? motionInfo;
+    final ui.Image previewDecoded;
+    try {
+      (exifInfo, isUltraHdr, motionInfo, previewDecoded) = await (
+        ExifService.extractExifAsync(bytes, path: path),
+        UltraHdrService.checkIsUltraHdr(bytes),
+        MotionPhotoService.extractMotionVideoAsync(bytes, path: path),
+        decodeImageFromBytes(bytes, maxDimension: 1600),
+      ).wait;
+    } on ParallelWaitError<
+        (ExifInfo?, bool?, MotionVideoInfo?, ui.Image?),
+        (AsyncError?, AsyncError?, AsyncError?, AsyncError?)> catch (e) {
+      // 其他步骤失败时释放已解码的预览纹理，并抛出首个原始错误
+      e.values.$4?.dispose();
+      final error = e.errors.$1 ?? e.errors.$2 ?? e.errors.$3 ?? e.errors.$4!;
+      Error.throwWithStackTrace(error.error, error.stackTrace);
+    }
     final isMotion = motionInfo != null && motionInfo.videoBytes.isNotEmpty;
-    final previewDecoded = await decodeImageFromBytes(
-      bytes,
-      maxDimension: 1600,
-    );
 
     return ImageItem(
       id: id,
@@ -224,6 +236,10 @@ class WatermarkProcessor {
     int quality = 95,
     bool preserveMotionPhoto = true,
     bool watermarkMotionVideo = false,
+    // 导入阶段已得到的检测结果（见 ImageItem），为 null 时导出阶段重新检测
+    bool? knownIsUltraHdr,
+    bool? knownIsMotionPhoto,
+    MotionVideoInfo? knownMotionInfo,
   }) async {
     final double originalW = baseImage.width.toDouble();
     final double originalH = baseImage.height.toDouble();
@@ -341,15 +357,24 @@ class WatermarkProcessor {
           bytes: rgbaBytes.buffer,
           order: img.ChannelOrder.rgba,
         );
-        jpgBytes = Uint8List.fromList(img.encodeJpg(image, quality: quality));
+        jpgBytes = img.encodeJpg(image, quality: quality);
       }
       Uint8List finalJpgBytes = jpgBytes;
 
       // 1. 若原图是 Ultra HDR 且输出 JPEG，则合成保持 Ultra HDR Gainmap 与 EXIF
+      // 导入时已检测过的结果直接复用，免去整张原图再次跨通道拷贝与扫描
       bool isHdr = false;
       if (originalBytes != null) {
-        // 采用统一检测结果，避免再次扫描覆盖原生的 SDR 判定
-        isHdr = await UltraHdrService.checkIsUltraHdr(originalBytes);
+        isHdr = knownIsUltraHdr ??
+            await UltraHdrService.checkIsUltraHdr(originalBytes);
+      }
+      Future<MotionVideoInfo?> resolveMotionInfo() async {
+        if (knownIsMotionPhoto == false) return null;
+        if (knownMotionInfo != null) return knownMotionInfo;
+        return MotionPhotoService.extractMotionVideoAsync(
+          originalBytes!,
+          path: originalPath,
+        );
       }
       if (isHdr && originalBytes != null) {
         final double photoLeft = type == WatermarkType.frame ? pad : 0.0;
@@ -370,10 +395,7 @@ class WatermarkProcessor {
         );
 
         if (preserveMotionPhoto) {
-          final motionInfo = await MotionPhotoService.extractMotionVideoAsync(
-            originalBytes,
-            path: originalPath,
-          );
+          final motionInfo = await resolveMotionInfo();
           if (motionInfo != null) {
             Uint8List videoBytesToEmbed = motionInfo.videoBytes;
 
@@ -415,10 +437,7 @@ class WatermarkProcessor {
 
       // 3. 动态照片 (Motion Photo) 重新组装与保留
       if (preserveMotionPhoto && originalBytes != null) {
-        final motionInfo = await MotionPhotoService.extractMotionVideoAsync(
-          originalBytes,
-          path: originalPath,
-        );
+        final motionInfo = await resolveMotionInfo();
         if (motionInfo != null) {
           Uint8List videoBytesToEmbed = motionInfo.videoBytes;
 

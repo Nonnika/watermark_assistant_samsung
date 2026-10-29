@@ -4,6 +4,7 @@ import 'one_ui_pressable.dart';
 import '../models/frame_watermark_config.dart';
 import '../models/image_item.dart';
 import '../models/watermark_config.dart';
+import '../services/motion_photo_service.dart';
 import '../services/watermark_processor.dart';
 import '../utils/media_store_helper.dart';
 
@@ -123,6 +124,16 @@ class _ExportBottomSheetState extends State<ExportBottomSheet> {
             quality: _jpgQuality,
             preserveMotionPhoto: _preserveMotion && _format == 'jpg',
             watermarkMotionVideo: _watermarkMotionVideo && _preserveMotion && _format == 'jpg',
+            knownIsUltraHdr: item.isUltraHdr,
+            knownIsMotionPhoto: item.isMotionPhoto,
+            knownMotionInfo: item.motionVideoBytes == null
+                ? null
+                : MotionVideoInfo(
+                    videoBytes: item.motionVideoBytes!,
+                    offset: 0,
+                    length: item.motionVideoLength ?? item.motionVideoBytes!.length,
+                    presentationTimestampUs: item.motionTimestampUs ?? 0,
+                  ),
           );
 
           final savedPath = await MediaStoreHelper.saveImageFile(
