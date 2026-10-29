@@ -11,7 +11,11 @@ import 'pebble_icon.dart';
 class SplashScreen extends StatefulWidget {
   final VoidCallback onFinish;
 
-  const SplashScreen({super.key, required this.onFinish});
+  /// 所有入场动效结束、进入静止停留时回调（减弱动效时立即回调），
+  /// 供外层趁静止期预构建下一屏，避免切换首帧集中构建造成卡顿。
+  final VoidCallback? onMotionSettled;
+
+  const SplashScreen({super.key, required this.onFinish, this.onMotionSettled});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -26,7 +30,11 @@ class _SplashScreenState extends State<SplashScreen>
   Timer? _reducedMotionTimer;
   bool _hasStarted = false;
   bool _hasFinished = false;
+  bool _hasSettled = false;
   bool _reduceMotion = false;
+
+  /// 文字入场区间的终点，之后画面完全静止
+  static const double _motionEnd = 0.62;
 
   @override
   void initState() {
@@ -42,7 +50,19 @@ class _SplashScreenState extends State<SplashScreen>
         });
     _arrival = _interval(0, 0.42, Curves.easeOutCubic);
     _details = _interval(0.05, 0.52, Curves.easeOutCubic);
-    _text = _interval(0.20, 0.62, Curves.easeOutCubic);
+    _text = _interval(0.20, _motionEnd, Curves.easeOutCubic);
+    _controller.addListener(_checkSettled);
+  }
+
+  void _checkSettled() {
+    if (_controller.value >= _motionEnd) _notifySettled();
+  }
+
+  void _notifySettled() {
+    if (_hasSettled) return;
+    _hasSettled = true;
+    _controller.removeListener(_checkSettled);
+    widget.onMotionSettled?.call();
   }
 
   Animation<double> _interval(double begin, double end, Curve curve) {
@@ -58,7 +78,12 @@ class _SplashScreenState extends State<SplashScreen>
     _hasStarted = true;
     _reduceMotion = MediaQuery.disableAnimationsOf(context);
     if (_reduceMotion) {
+      _controller.removeListener(_checkSettled);
       _controller.value = 1;
+      // 不能在 didChangeDependencies 中同步触发外层 setState
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _notifySettled();
+      });
       _reducedMotionTimer = Timer(
         const Duration(milliseconds: 400),
         _finishSplash,

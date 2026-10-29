@@ -8,15 +8,52 @@ void main() {
   setUp(() => AppStrings.currentLanguage.value = AppLanguage.zh);
   tearDown(() => AppStrings.currentLanguage.value = AppLanguage.zh);
 
-  Widget splash(VoidCallback onFinish, {bool reduceMotion = false}) {
+  Widget splash(
+    VoidCallback onFinish, {
+    bool reduceMotion = false,
+    VoidCallback? onMotionSettled,
+  }) {
     return MaterialApp(
       theme: OneUITheme.lightTheme(),
       home: MediaQuery(
         data: MediaQueryData(disableAnimations: reduceMotion),
-        child: SplashScreen(onFinish: onFinish),
+        child: SplashScreen(
+          onFinish: onFinish,
+          onMotionSettled: onMotionSettled,
+        ),
       ),
     );
   }
+
+  testWidgets('Reports motion settled once, before finishing', (tester) async {
+    var settled = 0;
+    var finishes = 0;
+    await tester.pumpWidget(
+      splash(() => finishes++, onMotionSettled: () => settled++),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1000));
+    expect(settled, 0);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(settled, 1);
+    expect(finishes, 0);
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(finishes, 1);
+    expect(settled, 1);
+  });
+
+  testWidgets('Reduced motion reports settled after the first frame', (
+    tester,
+  ) async {
+    var settled = 0;
+    await tester.pumpWidget(
+      splash(() {}, reduceMotion: true, onMotionSettled: () => settled++),
+    );
+    expect(settled, 1);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(settled, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('Completes automatically and only calls onFinish once', (
     tester,

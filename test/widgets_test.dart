@@ -10,6 +10,7 @@ import 'package:watermark_samsung/widgets/custom_photo_selector.dart';
 import 'package:watermark_samsung/widgets/frame_controls.dart';
 import 'package:watermark_samsung/widgets/hero_poster_banner.dart';
 import 'package:watermark_samsung/widgets/selector/selector_bottom_action.dart';
+import 'package:watermark_samsung/widgets/home_screen.dart';
 import 'package:watermark_samsung/widgets/splash_screen.dart';
 
 void main() {
@@ -32,6 +33,32 @@ void main() {
     // Now in HomeScreen
     expect(find.byType(HeroPosterBanner), findsOneWidget);
     expect(find.byType(CustomPhotoSelector), findsOneWidget);
+  });
+
+  testWidgets('Home is pre-built under the splash and revealed without rebuilding', (WidgetTester tester) async {
+    tester.platformDispatcher.localeTestValue = const Locale('zh', 'CN');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+
+    await tester.pumpWidget(const WatermarkAssistantApp(showSplashOnInit: true));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.byType(HomeScreen, skipOffstage: false), findsNothing);
+
+    // 入场动效静止后主页已在下方挂载，但动画暂停、不接收触摸
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.byType(HomeScreen, skipOffstage: false), findsOneWidget);
+    final homeState = tester.state(find.byType(HomeScreen, skipOffstage: false));
+    final ticker = tester.widget<TickerMode>(
+      find.ancestor(of: find.byType(HomeScreen, skipOffstage: false), matching: find.byType(TickerMode)).first,
+    );
+    expect(ticker.enabled, isFalse);
+
+    // 自动结束后启动页淡出并移除，主页沿用同一个 State
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(find.byType(SplashScreen), findsNothing);
+    expect(tester.state(find.byType(HomeScreen)), same(homeState));
   });
 
   testWidgets('FrameControls color strip renders blurred ball and switches background correctly', (WidgetTester tester) async {
