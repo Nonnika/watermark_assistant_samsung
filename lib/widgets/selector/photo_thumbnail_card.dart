@@ -93,7 +93,10 @@ class _PhotoThumbnailCardState extends State<PhotoThumbnailCard> {
   }
 
   Future<void> _checkUltraHdr(DevicePhotoModel photo, int generation) async {
-    final isHdr = await DevicePhotoService.isUltraHdr(photo);
+    final isHdr = await DevicePhotoService.isUltraHdr(
+      photo,
+      shouldContinue: () => _isCurrent(generation),
+    );
     if (_isCurrent(generation) && isHdr != _isUltraHdr) {
       setState(() => _isUltraHdr = isHdr);
     }
@@ -111,7 +114,7 @@ class _PhotoThumbnailCardState extends State<PhotoThumbnailCard> {
               : null,
           color: const Color(0xFF18181E),
         ),
-        clipBehavior: Clip.antiAlias,
+        // 直角卡片无需额外裁剪：BoxFit.cover 的图片绘制自身已裁到边界，省去每格一次 AA 裁剪
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -199,11 +202,11 @@ class _PhotoThumbnailCardState extends State<PhotoThumbnailCard> {
                 ),
                 child: Text(
                   widget.photo.formattedDate.isNotEmpty ? widget.photo.formattedDate : widget.photo.formattedSize,
+                  // 底部渐变已提供对比度，不再为每格文字附加模糊阴影（滚动时逐帧重绘代价高）
                   style: const TextStyle(
                     fontSize: 9,
                     color: Colors.white,
                     fontWeight: FontWeight.w600,
-                    shadows: [Shadow(color: Colors.black, blurRadius: 2)],
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

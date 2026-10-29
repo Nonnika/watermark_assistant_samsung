@@ -134,9 +134,12 @@ class SelectorGridPage extends StatelessWidget {
               ? const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics())
               : const NeverScrollableScrollPhysics(),
           padding: EdgeInsets.fromLTRB(16, 0, 16, selectedIds.isNotEmpty ? 84 : 24),
+          // 预留约 4 行：快速滑动时缩略图请求提前发出，进入屏幕前已解码
           // ignore: deprecated_member_use
-          cacheExtent: 180,
-          addRepaintBoundaries: false, // 专为 Adreno 优化：避免为每个卡片分配独立离屏 Texture
+          cacheExtent: 600,
+          // 每格独立重绘边界：滚动时只平移图层，不再逐帧重新录制所有可见卡片。
+          // Impeller 无栅格缓存，重绘边界只是独立 PictureLayer，不会额外分配离屏纹理。
+          addRepaintBoundaries: true,
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
             crossAxisSpacing: 8,

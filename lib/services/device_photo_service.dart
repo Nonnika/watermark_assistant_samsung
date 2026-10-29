@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'motion_photo_service.dart';
 import 'photos/thumbnail_loader.dart';
+import 'ultra_hdr/ultra_hdr_detector.dart';
 import 'ultra_hdr_service.dart';
 
 export 'photos/thumbnail_loader.dart' show ThumbnailRequest;
@@ -466,24 +468,78 @@ class DevicePhotoService {
     return false;
   }
 
+  /// 完整原图回退解析的并发上限：每次需读入整张原图，滚动相册时防止内存尖峰
+  static final _AsyncGate _hdrFallbackGate = _AsyncGate(2);
+
   /// 检查照片是否为 Ultra HDR (包含 Gainmap 增益图 / Apple HDR / ISO 21496-1)
-  static Future<bool> isUltraHdr(DevicePhotoModel photo) async {
+  ///
+  /// [shouldContinue] 在排队等到回退解析名额时检查，返回 false 则放弃（不写缓存），
+  /// 供滚出屏幕的缩略图卡片取消昂贵的整图读取。
+  static Future<bool> isUltraHdr(
+    DevicePhotoModel photo, {
+    bool Function()? shouldContinue,
+  }) async {
     final cached = _ultraHdrCache[photo.id];
     if (cached != null) return cached;
 
-    if (photo.directBytes == null && _isAndroid) {
+    final direct = photo.directBytes;
+    if (direct == null && _isAndroid) {
       final native = await UltraHdrService.checkPhotoGainmap(path: photo.path, uri: photo.uri);
       if (native != null) {
         _ultraHdrCache[photo.id] = native;
         return native;
       }
     }
+    if (direct != null) {
+      final native = await UltraHdrDetector.checkNativeGainmap(bytes: direct);
+      if (native != null) {
+        _ultraHdrCache[photo.id] = native;
+        return native;
+      }
+    }
+
     // 用完整原图统一判定；分开的头尾片段无法验证 MPF / 增益图结构。
-    final bytes = await getFullPhotoBytes(photo);
-    if (bytes == null || bytes.isEmpty) return false; // 读取失败不缓存，允许重试。
-    final isHdr = await UltraHdrService.checkIsUltraHdr(bytes);
-    _ultraHdrCache[photo.id] = isHdr;
-    return isHdr;
+    // Android 14 以下原生无法判定，每个滚入的缩略图都会走到这里：限制并发，
+    // 优先在后台 isolate 中按路径直接读文件解析，避免整图跨通道往返与 UI isolate 扫描。
+    return _hdrFallbackGate.run(() async {
+      if (shouldContinue != null && !shouldContinue()) return false;
+      final cachedNow = _ultraHdrCache[photo.id];
+      if (cachedNow != null) return cachedNow;
+
+      bool? isHdr;
+      if (direct != null) {
+        isHdr = await _parseUltraHdrInBackground(direct);
+      } else if (photo.path.isNotEmpty) {
+        isHdr = await _parseUltraHdrFileInBackground(photo.path);
+      }
+      if (isHdr == null) {
+        final bytes = await getFullPhotoBytes(photo);
+        if (bytes == null || bytes.isEmpty) return false; // 读取失败不缓存，允许重试。
+        isHdr = await _parseUltraHdrInBackground(bytes);
+      }
+      final result = isHdr == true;
+      _ultraHdrCache[photo.id] = result;
+      return result;
+    });
+  }
+
+  // Isolate.run 的闭包放在只含数据参数的独立函数中创建，避免捕获调用方作用域里
+  // 不可跨 isolate 发送的对象（如卡片传入的 shouldContinue 回调及其 State）。
+  static Future<bool> _parseUltraHdrInBackground(Uint8List bytes) =>
+      Isolate.run(() => UltraHdrDetector.isUltraHdr(bytes));
+
+  static Future<bool?> _parseUltraHdrFileInBackground(String path) =>
+      Isolate.run(() => _isUltraHdrFile(path));
+
+  /// 在后台 isolate 中执行：文件不可直接读取时返回 null，由调用方经原生通道读取
+  static bool? _isUltraHdrFile(String path) {
+    try {
+      final file = File(path);
+      if (!file.existsSync()) return null;
+      return UltraHdrDetector.isUltraHdr(file.readAsBytesSync());
+    } catch (_) {
+      return null;
+    }
   }
 
   /// 批量并发检测动态照片 (Android 原生 Snapdragon 多核并行加速 + 渐进式流式返回)
@@ -540,5 +596,34 @@ class DevicePhotoService {
       onProgress?.call(List.from(result));
     }
     return result;
+  }
+}
+
+/// 简单异步信号量：同时最多 [limit] 个任务执行，其余按到达顺序排队
+class _AsyncGate {
+  _AsyncGate(this.limit);
+
+  final int limit;
+  int _active = 0;
+  final _waiters = <Completer<void>>[];
+
+  Future<T> run<T>(Future<T> Function() task) async {
+    if (_active >= limit) {
+      final waiter = Completer<void>();
+      _waiters.add(waiter);
+      await waiter.future;
+    } else {
+      _active++;
+    }
+    try {
+      return await task();
+    } finally {
+      if (_waiters.isNotEmpty) {
+        // 名额直接移交给下一个等待者，_active 保持不变
+        _waiters.removeAt(0).complete();
+      } else {
+        _active--;
+      }
+    }
   }
 }

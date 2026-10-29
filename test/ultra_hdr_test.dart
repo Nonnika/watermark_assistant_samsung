@@ -386,6 +386,41 @@ void main() {
     },
   );
 
+  test(
+    'Gallery full-file HDR fallback is concurrency-limited and skips cancelled cells',
+    () async {
+      UltraHdrDetector.debugOverrideIsAndroid = true;
+      DevicePhotoService.debugOverrideIsAndroid = true;
+      var inFlight = 0;
+      var peak = 0;
+      final reads = <String>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method != 'getPhotoBytes') return null; // 原生无法判定（Android 14 以下）
+        final uri = (call.arguments as Map)['uri'] as String;
+        reads.add(uri);
+        inFlight++;
+        if (inFlight > peak) peak = inFlight;
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        inFlight--;
+        return _jpeg();
+      });
+      final photos = [
+        for (var i = 0; i < 8; i++)
+          DevicePhotoModel(id: 'gate-$i', name: 'IMG.jpg', path: '', uri: 'content://media/gate/$i'),
+      ];
+      final results = await Future.wait([
+        for (final (i, photo) in photos.indexed)
+          DevicePhotoService.isUltraHdr(photo, shouldContinue: () => i.isEven),
+      ]);
+      expect(results, everyElement(isFalse));
+      expect(peak, lessThanOrEqualTo(2));
+      // 已滚出屏幕（shouldContinue 为 false）的卡片不读取整图，也不写入缓存
+      expect(reads, [for (var i = 0; i < 8; i += 2) 'content://media/gate/$i']);
+      expect(DevicePhotoService.getCachedUltraHdr(photos[1]), isNull);
+      expect(DevicePhotoService.getCachedUltraHdr(photos[0]), isFalse);
+    },
+  );
+
   test('Gallery uses full files including small JPEGs and gainmaps outside head/tail slices', () async {
     final directory = await Directory.systemTemp.createTemp('hdr-test');
     addTearDown(() => directory.delete(recursive: true));

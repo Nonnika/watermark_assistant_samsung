@@ -125,17 +125,20 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final initial = find
+      // 以首次滚动后的稳态（上下两侧都有预构建区）为基线，之后继续滚动不应累积卡片
+      controller.jumpTo(600);
+      await tester.pumpAndSettle();
+      final steady = find
           .byType(PhotoThumbnailCard, skipOffstage: false)
           .evaluate()
           .length;
-      for (var i = 1; i <= 10; i++) {
+      for (var i = 2; i <= 10; i++) {
         controller.jumpTo(i * 600);
         await tester.pumpAndSettle();
       }
       expect(
         find.byType(PhotoThumbnailCard, skipOffstage: false).evaluate().length,
-        lessThanOrEqualTo(initial + 6),
+        lessThanOrEqualTo(steady + 3),
       );
       expect(
         find.byKey(const ValueKey('photo_scroll-0'), skipOffstage: false),
