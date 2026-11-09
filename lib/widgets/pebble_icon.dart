@@ -2,8 +2,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import 'one_ui_icon_artwork.dart';
-
 /// One UI 风格的圆润超椭圆遮罩。
 class SamsungSquircleClipper extends CustomClipper<Path> {
   final double n;
@@ -47,60 +45,49 @@ class SamsungSquircleClipper extends CustomClipper<Path> {
   }
 }
 
-/// 三星 OneUI 风格鹅卵石 (Pebble Squircle) 水印助手矢量图标
-/// 蓝紫渐变背景、叠放相片与四角星水印标记。
+/// 应用图标（与 Android 启动图标同源，由 `tool/generate_icons.py` 生成）。
 class AppPebbleIcon extends StatelessWidget {
+  static const asset = AssetImage('assets/logo/app_icon.png');
+
   final double size;
   final bool hasShadow;
-  final double n;
 
-  const AppPebbleIcon({
-    super.key,
-    this.size = 104.0,
-    this.hasShadow = false,
-    this.n = 2.85,
-  });
+  const AppPebbleIcon({super.key, this.size = 104.0, this.hasShadow = false});
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    final image = Image(
+      image: asset,
       width: size,
       height: size,
-      child: CustomPaint(
-        painter: PebbleShadowAndCardPainter(hasShadow: hasShadow, n: n),
-      ),
+      filterQuality: FilterQuality.medium,
+      gaplessPlayback: true,
+    );
+    if (!hasShadow) return image;
+    return CustomPaint(
+      painter: const _PebbleShadowPainter(),
+      child: image,
     );
   }
 }
 
-class PebbleShadowAndCardPainter extends CustomPainter {
-  final bool hasShadow;
-  final double n;
-
-  const PebbleShadowAndCardPainter({required this.hasShadow, required this.n});
+class _PebbleShadowPainter extends CustomPainter {
+  const _PebbleShadowPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
     final squircle = SamsungSquircleClipper.createSamsungSquirclePath(
       size,
-      n: n,
+      n: 3.75,
     );
-    if (hasShadow) {
-      canvas.drawPath(
-        squircle.shift(Offset(0, size.height * 0.05)),
-        Paint()
-          ..color = const Color(0xFF3D55D9).withValues(alpha: 0.24)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.09),
-      );
-    }
-    canvas.save();
-    canvas.clipPath(squircle);
-    OneUiIconArtwork.paintBackground(canvas, Offset.zero & size);
-    OneUiIconArtwork.paintForeground(canvas, size);
-    canvas.restore();
+    canvas.drawPath(
+      squircle.shift(Offset(0, size.height * 0.05)),
+      Paint()
+        ..color = const Color(0xFF3D55D9).withValues(alpha: 0.24)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.09),
+    );
   }
 
   @override
-  bool shouldRepaint(covariant PebbleShadowAndCardPainter oldDelegate) =>
-      oldDelegate.hasShadow != hasShadow || oldDelegate.n != n;
+  bool shouldRepaint(covariant _PebbleShadowPainter oldDelegate) => false;
 }

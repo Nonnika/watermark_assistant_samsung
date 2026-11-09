@@ -76,6 +76,8 @@ class _SplashScreenState extends State<SplashScreen>
     super.didChangeDependencies();
     if (_hasStarted) return;
     _hasStarted = true;
+    // 尽早解码图标，避免入场动画首帧图标空白
+    precacheImage(AppPebbleIcon.asset, context);
     _reduceMotion = MediaQuery.disableAnimationsOf(context);
     if (_reduceMotion) {
       _controller.removeListener(_checkSettled);
